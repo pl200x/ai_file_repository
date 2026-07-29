@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.permission.mapper.PermissionMapper">
+
+    <resultMap id="PermissionResultMap"
+               type="com.example.permission.entity.Permission">
+
+        <id property="id" column="id"/>
+
+        <result property="type" column="type"/>
+        <result property="targetId" column="target_id"/>
+        <result property="userId" column="user_id"/>
+
+        <result property="readable" column="readable"/>
+        <result property="writable" column="writable"/>
+        <result property="manageable" column="manageable"/>
+        <result property="status" column="status"/>
+
+        <result property="permissionTime" column="permission_time"/>
+        <result property="expirationTime" column="expiration_time"/>
+    </resultMap>
+
+    <sql id="PermissionColumns">
+        id,
+        type,
+        target_id,
+        user_id,
+        readable,
+        writable,
+        manageable,
+        status,
+        permission_time,
+        expiration_time
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+
+        INSERT INTO permission (
+        type,
+        target_id,
+        user_id,
+        readable,
+        writable,
+        manageable,
+        status,
+        permission_time,
+        expiration_time
+        )
+        VALUES (
+        #{type},
+        #{targetId},
+        #{userId},
+        #{readable},
+        #{writable},
+        #{manageable},
+        #{status},
+        now(),
+        #{expirationTime}
+        )
+    </insert>
+
+    <insert id="batchInsert" useGeneratedKeys="true" keyProperty="id">
+
+        INSERT INTO permission (
+        type,
+        target_id,
+        user_id,
+        readable,
+        writable,
+        manageable,
+        status,
+        permission_time,
+        expiration_time
+        )
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.type},
+            #{item.targetId},
+            #{item.userId},
+            #{item.readable},
+            #{item.writable},
+            #{item.manageable},
+            #{item.status},
+            now(),
+            #{item.expirationTime}
+            )
+        </foreach>
+    </insert>
+
+    <delete id="deleteById">
+        DELETE FROM permission
+        WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteByTypeAndTargetId">
+        DELETE FROM permission
+        WHERE type = #{type}
+        AND target_id = #{targetId}
+    </delete>
+
+    <update id="updateById">
+
+        UPDATE permission
+
+        <set>
+            <if test="type != null">
+                type = #{type},
+            </if>
+
+            <if test="targetId > 0">
+                target_id = #{targetId},
+            </if>
+
+            <if test="userId > 0">
+                user_id = #{userId},
+            </if>
+
+            <if test="readable != null">
+                readable = #{readable},
+            </if>
+
+            <if test="writable != null">
+                writable = #{writable},
+            </if>
+
+            <if test="manageable != null">
+                manageable = #{manageable},
+            </if>
+
+            <if test="status != null">
+                status = #{status},
+            </if>
+
+            <if test="permissionTime != null">
+                permission_time = #{permissionTime},
+            </if>
+
+            <if test="expirationTime != null">
+                expiration_time = #{expirationTime},
+            </if>
+        </set>
+
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectById"
+            resultMap="PermissionResultMap">
+
+        SELECT
+        <include refid="PermissionColumns"/>
+
+        FROM permission
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByType"
+            resultMap="PermissionResultMap">
+
+        SELECT
+        <include refid="PermissionColumns"/>
+
+        FROM permission
+        WHERE type = #{type}
+        AND target_id = #{targetId}
+        ORDER BY id DESC
+    </select>
+
+    <select id="selectByTypeAndTargetIdAndUserId"
+            resultMap="PermissionResultMap">
+
+        SELECT
+        <include refid="PermissionColumns"/>
+
+        FROM permission
+        WHERE type = #{type}
+        AND target_id = #{targetId}
+        AND user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <select id="selectByUserId"
+            resultMap="PermissionResultMap">
+
+        SELECT
+        <include refid="PermissionColumns"/>
+
+        FROM permission
+        WHERE user_id = #{userId}
+        ORDER BY id DESC
+    </select>
+
+    <select id="selectValidPermissionsByUserId"
+            resultMap="PermissionResultMap">
+
+        SELECT
+        <include refid="PermissionColumns"/>
+
+        FROM permission
+        WHERE user_id = #{userId}
+        AND status = 'APPROVED'
+        AND permission_time &lt;= #{currentTime}
+        AND expiration_time &gt; #{currentTime}
+        ORDER BY expiration_time ASC
+    </select>
+
+</mapper>

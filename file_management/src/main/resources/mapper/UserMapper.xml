@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.file_management.mapper.UserMapper">
+    <resultMap id="UserResultMap" type="com.example.file_management.entity.User">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="groupId" column="group_id"/>
+        <result property="name" column="name"/>
+        <result property="email" column="email"/>
+        <result property="profile" column="profile"/>
+        <result property="createTime" column="created_at"/>
+    </resultMap>
+
+    <select id="queryById" resultMap="UserResultMap">
+        SELECT * FROM users WHERE id = #{id}
+    </select>
+
+    <!-- 批量查作者（头像展示等场景）；空列表守卫在service层，这里保持SQL干净 -->
+    <select id="queryByIds" resultMap="UserResultMap">
+        SELECT * FROM users WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <!-- 命中唯一索引 uq_users_email，登录场景用 -->
+    <select id="queryByEmail" resultMap="UserResultMap">
+        SELECT * FROM users WHERE email = #{email}
+    </select>
+
+    <!-- 命中 idx_users_tenant：某企业全部员工 -->
+    <select id="queryByTenantId" resultMap="UserResultMap">
+        SELECT * FROM users WHERE tenant_id = #{tenantId}
+    </select>
+
+    <!-- 命中 idx_users_group：某组全部成员 -->
+    <select id="queryByGroupId" resultMap="UserResultMap">
+        SELECT * FROM users WHERE group_id = #{groupId}
+    </select>
+
+
+    <insert id="addUser">
+        INSERT INTO users (tenant_id, group_id, name, email, profile)
+        VALUES (#{tenantId}, #{groupId}, #{name}, #{email}, #{profile})
+    </insert>
+</mapper>

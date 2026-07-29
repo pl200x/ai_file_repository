@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.file_management.mapper.FileVersionMapper">
+    <resultMap id="FileVersionResultMap" type="com.example.file_management.entity.FileVersion">
+        <id property="id" column="id"/>
+        <result property="fileId" column="file_id"/>
+        <result property="versionNo" column="version_no"/>
+        <result property="title" column="title"/>
+        <result property="defaultTitle" column="default_title"/>
+        <result property="content" column="content"/>
+        <result property="editorId" column="editor_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="repositoryId" column="repository_id"/>
+        <result property="openTime" column="open_time"/>
+        <result property="lastMergeTime" column="last_merge_time"/>
+    </resultMap>
+
+    <!-- file_id可为空：文档尚未创建时版本先落库，靠 tenant_id+repository_id+default_title 定位 -->
+    <insert id="insertVersion" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO file_versions (file_id, version_no, title, default_title, content, editor_id, tenant_id, repository_id)
+        VALUES (#{fileId}, #{versionNo}, #{title}, #{defaultTitle}, #{content}, #{editorId}, #{tenantId}, #{repositoryId})
+    </insert>
+
+    <select id="queryLatestByFileId" resultMap="FileVersionResultMap">
+        SELECT * FROM file_versions
+        WHERE file_id = #{fileId}
+        ORDER BY version_no DESC
+        LIMIT 1
+    </select>
+
+    <!-- 版本列表不带content：全量快照是longtext，列表场景只要元信息；
+         带上default_title供前端打开已有文档时读出这条idempotency key，续接后续的自动保存/提交 -->
+    <select id="queryByFileId" resultMap="FileVersionResultMap">
+        SELECT id, file_id, version_no, title, default_title, editor_id, open_time, last_merge_time
+        FROM file_versions
+        WHERE file_id = #{fileId}
+        ORDER BY version_no DESC
+    </select>
+
+    <!-- 单版本详情带content；两个参数，接口需 @Param -->
+    <select id="queryByFileIdAndVersionNo" resultMap="FileVersionResultMap">
+        SELECT * FROM file_versions
+        WHERE file_id = #{fileId}
+        AND version_no = #{versionNo}
+    </select>
+
+    <!-- defaultTitle is the stable chain key; version_no determines ordering. -->
+    <select id="queryLastByTenantIdRepositoryIdAndTitle" resultMap="FileVersionResultMap">
+        SELECT * FROM file_versions
+        WHERE tenant_id = #{tenantId}
+        AND repository_id = #{repositoryId}
+        AND default_title = #{defaultTitle}
+        ORDER BY version_no DESC
+        LIMIT 1
+    </select>
+
+    <select id="queryLatestByDefaultTitleForUpdate" resultMap="FileVersionResultMap">
+        SELECT * FROM file_versions
+        WHERE tenant_id = #{tenantId}
+        AND repository_id = #{repositoryId}
+        AND default_title = #{defaultTitle}
+        ORDER BY version_no DESC
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <select id="queryLinkedFileIdsByDefaultTitle" resultType="java.lang.Integer">
+        SELECT DISTINCT file_id
+        FROM file_versions
+        WHERE tenant_id = #{tenantId}
+        AND repository_id = #{repositoryId}
+        AND default_title = #{defaultTitle}
+        AND file_id IS NOT NULL
+    </select>
+
+    <select id="queryByDefaultTitle" resultMap="FileVersionResultMap">
+        SELECT * FROM file_versions
+        WHERE tenant_id = #{tenantId}
+        AND repository_id = #{repositoryId}
+        AND default_title = #{defaultTitle}
+        ORDER BY version_no DESC
+    </select>
+
+    <!-- 文档刚创建：把草稿阶段(file_id仍为NULL)、同一defaultTitle下的历史版本过继给新file_id；
+         已经过继过的调用会命中0行，是幂等操作 -->
+    <update id="adoptDraftVersions">
+        UPDATE file_versions SET file_id = #{fileId}
+        WHERE tenant_id = #{tenantId}
+        AND repository_id = #{repositoryId}
+        AND default_title = #{defaultTitle}
+        AND file_id IS NULL
+    </update>
+</mapper>

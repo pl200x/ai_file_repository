@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.file_management.mapper.GroupMapper">
+    <resultMap id="GroupResultMap" type="com.example.file_management.entity.Group">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="name" column="name"/>
+        <result property="profile" column="profile"/>
+        <result property="managerId" column="manager_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="queryById" resultMap="GroupResultMap">
+        SELECT * FROM org_groups WHERE id = #{id}
+    </select>
+
+    <!-- 命中 idx_groups_tenant：某企业全部组 -->
+    <select id="queryByTenantId" resultMap="GroupResultMap">
+        SELECT * FROM org_groups WHERE tenant_id = #{tenantId}
+    </select>
+
+    <!-- 命中唯一索引 uq_groups_tenant_name；两个参数，接口需 @Param -->
+    <select id="queryByTenantIdAndName" resultMap="GroupResultMap">
+        SELECT * FROM org_groups WHERE tenant_id = #{tenantId} AND name = #{name}
+    </select>
+
+    <!-- manager_id 上有外键自动索引 -->
+    <select id="queryByManagerId" resultMap="GroupResultMap">
+        SELECT * FROM org_groups WHERE manager_id = #{managerId}
+    </select>
+
+    <insert id="addGroup">
+        INSERT INTO org_groups (tenant_id, name, profile, manager_id)
+        VALUES (#{tenantId}, #{name}, #{profile}, #{managerId})
+    </insert>
+</mapper>

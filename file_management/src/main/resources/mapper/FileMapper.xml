@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.file_management.mapper.FileMapper">
+    <resultMap id="FileResultMap" type="com.example.file_management.entity.File">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="repositoryId" column="repository_id"/>
+        <result property="ownerId" column="owner_id"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="writerList" column="writer_list"/>
+        <result property="readerList" column="reader_list"/>
+        <result property="manageableList" column="manageable_list"/>
+        <result property="isPrivate" column="is_private"/>
+        <result property="publishTime" column="publish_time"/>
+        <result property="recentUpdateTime" column="recent_update_time"/>
+        <result property="latestModifiedUserId" column="latest_modified_user_id"/>
+        <result property="isDeleted" column="is_deleted"/>
+    </resultMap>
+
+    <select id="queryById" resultMap="FileResultMap">
+        SELECT * FROM files WHERE id = #{id} AND is_deleted = 0
+    </select>
+
+    <select id="queryByIdForUpdate" resultMap="FileResultMap">
+        SELECT * FROM files WHERE id = #{id} AND is_deleted = 0 FOR UPDATE
+    </select>
+
+    <!-- 复合索引 idx_files_tenant_repo 最左前缀是 tenant_id，
+         按库查文件必须带 tenant_id 才能命中索引；两个参数，接口需 @Param -->
+    <select id="queryByRepositoryId" resultMap="FileResultMap">
+        SELECT * FROM files
+        WHERE tenant_id = #{tenantId}
+        AND repository_id = #{repositoryId}
+        AND is_deleted = 0
+    </select>
+
+
+
+    <select id="queryByTitleAndRepository" resultMap="FileResultMap">
+        SELECT * FROM files
+        WHERE title = #{title}
+        AND repository_id = #{repositoryId}
+        AND is_deleted = 0
+    </select>
+
+    <!-- uk_files_tenant_repo_title 唯一约束保证同租户同库下 title 唯一，至多返回一行 -->
+    <select id="queryByTenantIdRepositoryIdAndTitle" resultMap="FileResultMap">
+        SELECT * FROM files
+        WHERE tenant_id = #{tenantId}
+        AND repository_id = #{repositoryId}
+        AND title = #{title}
+        AND is_deleted = 0
+    </select>
+
+    <!-- 命中 idx_files_owner：某用户创建的全部文件 -->
+    <select id="queryByOwnerId" resultMap="FileResultMap">
+        SELECT * FROM files WHERE owner_id = #{ownerId} AND is_deleted = 0
+    </select>
+
+    <!-- 反查"某用户编辑过的文件"；同样先带 tenant_id；两个参数，接口需 @Param -->
+    <select id="queryByWriterId" resultMap="FileResultMap">
+        SELECT * FROM files
+        WHERE tenant_id = #{tenantId}
+        AND CONCAT(',', writer_list, ',') LIKE CONCAT('%,', #{userId}, ',%')
+        AND is_deleted = 0
+    </select>
+
+    <!-- 软删除文件只能通过回收站专用查询读取，避免重新进入普通业务链路。 -->
+    <select id="queryDeletedById" resultMap="FileResultMap">
+        SELECT * FROM files WHERE id = #{id} AND is_deleted = 1
+    </select>
+
+    <select id="queryAllTrashBin" resultMap="FileResultMap">
+        SELECT * FROM files
+        WHERE tenant_id = #{tenantId}
+        AND is_deleted = 1
+        ORDER BY recent_update_time DESC, id DESC
+    </select>
+
+    <!-- service 层创建时把 latestModifiedUserId 设为 ownerId；
+         回填的 id 之后写 Milvus chunk 元数据要用 -->
+    <insert id="addFile" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO files (tenant_id, repository_id, owner_id, title, content,
+        writer_list, reader_list, manageable_list, is_private, latest_modified_user_id)
+        VALUES (#{tenantId}, #{repositoryId}, #{ownerId}, #{title}, #{content},
+        #{writerList}, #{readerList}, #{manageableList}, #{isPrivate}, #{latestModifiedUserId})
+    </insert>
+
+
+    <update id="updateFile">
+        UPDATE files SET title = #{title},
+        content = #{content},
+        writer_list = #{writerList},
+        reader_list = #{readerList},
+        manageable_list = #{manageableList},
+        is_private = #{isPrivate},
+        recent_update_time = now(),
+        latest_modified_user_id = #{latestModifiedUserId}
+        WHERE id = #{id}
+        AND is_deleted = 0
+    </update>
+
+    <!-- 阅读追加 readerList 专用：不动 recent_update_time（阅读不算更新）；两个参数，接口需 @Param -->
+    <update id="updateReaderList">
+        UPDATE files SET reader_list = #{readerList}
+        WHERE id = #{id}
+        AND is_deleted = 0
+    </update>
+
+    <update id="moveToTrashBin">
+        UPDATE files
+        SET is_deleted = 1,
+        recent_update_time = now(),
+        latest_modified_user_id = #{latestModifiedUserId}
+        WHERE id = #{id}
+        AND is_deleted = 0
+    </update>
+
+    <update id="restoreFromTrashBin">
+        UPDATE files
+        SET is_deleted = 0,
+        recent_update_time = now(),
+        latest_modified_user_id = #{latestModifiedUserId}
+        WHERE id = #{id}
+        AND is_deleted = 1
+    </update>
+
+    <delete id="deleteByFileId">
+        DELETE FROM files WHERE id = #{id}
+    </delete>
+
+</mapper>

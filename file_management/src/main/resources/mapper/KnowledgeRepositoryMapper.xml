@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.file_management.mapper.KnowledgeRepositoryMapper">
+    <resultMap id="KnowledgeRepositoryResultMap" type="com.example.file_management.entity.KnowledgeRepository">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="ownerId" column="owner_id"/>
+        <result property="title" column="title"/>
+        <result property="description" column="description"/>
+        <result property="writableList" column="writable_list"/>
+        <result property="readableList" column="readable_list"/>
+        <result property="manageableList" column="manageable_list"/>
+        <result property="isPersonal" column="is_personal"/>
+        <result property="createTime" column="create_time"/>
+        <!-- personal_owner_key 是数据库生成列，故意不映射 -->
+    </resultMap>
+
+    <!-- 三个权限名单是普通列，查出来实体里就带着，Java 侧 split(",") 即成员数组 -->
+    <select id="queryById" resultMap="KnowledgeRepositoryResultMap">
+        SELECT * FROM knowledge_repositories WHERE id = #{id}
+    </select>
+
+    <select id="queryByIdForUpdate" resultMap="KnowledgeRepositoryResultMap">
+        SELECT * FROM knowledge_repositories WHERE id = #{id} FOR UPDATE
+    </select>
+
+    <!-- 命中 idx_repos_tenant：某企业全部知识库 -->
+    <select id="queryByTenantId" resultMap="KnowledgeRepositoryResultMap">
+        SELECT * FROM knowledge_repositories WHERE tenant_id = #{tenantId}
+    </select>
+
+    <!-- 命中 idx_repos_owner：某用户拥有的全部知识库 -->
+    <select id="queryByOwnerId" resultMap="KnowledgeRepositoryResultMap">
+        SELECT * FROM knowledge_repositories WHERE owner_id = #{ownerId}
+    </select>
+
+    <!-- 建文件没选库时，用它拿该用户的个人默认库 -->
+    <select id="queryPersonalByOwnerId" resultMap="KnowledgeRepositoryResultMap">
+        SELECT * FROM knowledge_repositories WHERE owner_id = #{ownerId} AND is_personal = 1
+    </select>
+
+    <!-- 反查"某用户是成员的知识库"：三个权限名单任一命中即算成员；
+         LIKE 走不了索引，先用 tenant_id 缩小范围；两个参数，接口需 @Param -->
+    <select id="queryByMemberId" resultMap="KnowledgeRepositoryResultMap">
+        SELECT *
+        FROM knowledge_repositories
+        WHERE tenant_id = #{tenantId}
+        AND (
+        CONCAT(',', readable_list, ',') LIKE CONCAT('%,', #{memberId}, ',%')
+        OR CONCAT(',', writable_list, ',') LIKE CONCAT('%,', #{memberId}, ',%')
+        OR CONCAT(',', manageable_list, ',') LIKE CONCAT('%,', #{memberId}, ',%')
+        )
+    </select>
+
+    <!-- 注册时插个人库 isPersonal 传 true，三个名单传 null -->
+    <insert id="addRepository">
+        INSERT INTO knowledge_repositories (tenant_id, owner_id, title, description,
+        writable_list, readable_list, manageable_list, is_personal)
+        VALUES (#{tenantId}, #{ownerId}, #{title}, #{description},
+        #{writableList}, #{readableList}, #{manageableList}, #{isPersonal})
+    </insert>
+
+    <!-- "update 名单添加其他用户"：service 层查出旧值、追加、整串写回；
+         只更新传了非 null 的名单 -->
+    <update id="updateMemberList">
+        UPDATE knowledge_repositories
+        <set>
+            <if test="writableList != null">writable_list = #{writableList},</if>
+            <if test="readableList != null">readable_list = #{readableList},</if>
+            <if test="manageableList != null">manageable_list = #{manageableList},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+</mapper>
