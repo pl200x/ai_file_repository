@@ -29,16 +29,30 @@ process_belongs_to_project() {
 
     case "$name" in
         frontend)
-            [[ "$command_line" == *"$FRONTEND_DIR"* &&
-               "$command_line" == *"vite"* ]]
+            [[ "$command_line" == *"vite"* ]] &&
+                {
+                    [[ "$command_line" == *"$FRONTEND_DIR/node_modules/.bin/vite"* ]] ||
+                    [[ "$process_cwd" == "$ROOT_DIR" &&
+                       "$command_line" == *"frontend/node_modules/.bin/vite"* ]] ||
+                    [[ "$process_cwd" == "$FRONTEND_DIR" &&
+                       "$command_line" == *"node_modules/.bin/vite"* ]]
+                }
             ;;
         file_management)
             [[ "$command_line" == *"$FILE_MANAGEMENT_DIR/target/file_management-0.0.1-SNAPSHOT.jar"* ||
+               ("$process_cwd" == "$ROOT_DIR" &&
+                "$command_line" == *"file_management/target/file_management-0.0.1-SNAPSHOT.jar"*) ||
+               ("$process_cwd" == "$FILE_MANAGEMENT_DIR" &&
+                "$command_line" == *"target/file_management-0.0.1-SNAPSHOT.jar"*) ||
                ("$process_cwd" == "$FILE_MANAGEMENT_DIR" &&
                 "$command_line" == *"FileManagementApplication"*) ]]
             ;;
         permission)
             [[ "$command_line" == *"$PERMISSION_DIR/target/Permission-0.0.1-SNAPSHOT.jar"* ||
+               ("$process_cwd" == "$ROOT_DIR" &&
+                "$command_line" == *"permission/target/Permission-0.0.1-SNAPSHOT.jar"*) ||
+               ("$process_cwd" == "$PERMISSION_DIR" &&
+                "$command_line" == *"target/Permission-0.0.1-SNAPSHOT.jar"*) ||
                ("$process_cwd" == "$PERMISSION_DIR" &&
                 "$command_line" == *"PermissionApplication"*) ]]
             ;;
