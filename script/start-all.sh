@@ -10,11 +10,19 @@ PERMISSION_DIR="$ROOT_DIR/permission"
 FILE_MANAGEMENT_DIR="$ROOT_DIR/file_management"
 LOG_DIR="$SCRIPT_DIR/logs"
 RUN_DIR="$SCRIPT_DIR/run"
+ENV_FILE="$ROOT_DIR/.env"
 
 PERMISSION_JAR="$PERMISSION_DIR/target/Permission-0.0.1-SNAPSHOT.jar"
 FILE_MANAGEMENT_JAR="$FILE_MANAGEMENT_DIR/target/file_management-0.0.1-SNAPSHOT.jar"
 
 mkdir -p "$LOG_DIR" "$RUN_DIR" "$PERMISSION_DIR/logs" "$FILE_MANAGEMENT_DIR/logs"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+fi
 
 require_command() {
     local command_name=$1

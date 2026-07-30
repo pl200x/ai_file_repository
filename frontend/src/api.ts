@@ -12,19 +12,25 @@ import type {
   PermissionRequest,
   PermissionTargetType,
   UpdateFileRequest,
+  UserSummary,
   UserPermission,
 } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
+  readonly code: number;
+  readonly httpStatus: number;
+
   constructor(
     message: string,
-    readonly code: number,
-    readonly httpStatus: number,
+    code: number,
+    httpStatus: number,
   ) {
     super(message);
     this.name = "ApiError";
+    this.code = code;
+    this.httpStatus = httpStatus;
   }
 }
 
@@ -78,6 +84,16 @@ function put<T extends BaseResponse, TBody>(
 }
 
 export const api = {
+  listUsers(
+    tenantId: number,
+    signal?: AbortSignal,
+  ): Promise<DataResponse<UserSummary[]>> {
+    return request(
+      `/api/user/list?tenantId=${tenantId}`,
+      signal ? { signal } : undefined,
+    );
+  },
+
   listRepositories(
     tenantId: number,
     signal?: AbortSignal,

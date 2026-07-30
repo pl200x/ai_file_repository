@@ -1,7 +1,8 @@
 import { useState } from "react";
-import type { FileDocument } from "../types";
+import type { FileDocument, UserSummary } from "../types";
 import { useEditorSession } from "../hooks/useEditorSession";
 import { DocumentContentEditor } from "./DocumentContentEditor";
+import { FileAccessRequestPanel } from "./FileAccessRequestPanel";
 import { VersionPanel } from "./VersionPanel";
 
 interface EditorWorkspaceProps {
@@ -11,6 +12,7 @@ interface EditorWorkspaceProps {
   initialDefaultTitle?: string;
   initialVersionNo?: number;
   userId: number;
+  users: UserSummary[];
   showToast: (message: string, success?: boolean) => void;
   refreshDocuments: () => Promise<FileDocument[]>;
   onCreated: (fileId: number) => void;
@@ -25,6 +27,24 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
   const [deletingPermanently, setDeletingPermanently] =
     useState(false);
   const [movingToTrash, setMovingToTrash] = useState(false);
+
+  if (
+    props.mode === "edit" &&
+    props.fileId !== null &&
+    session.accessDenied
+  ) {
+    return (
+      <main className="editor-panel">
+        <FileAccessRequestPanel
+          fileId={props.fileId}
+          userId={props.userId}
+          checking={session.loading}
+          onRetry={session.retryLoad}
+          showToast={props.showToast}
+        />
+      </main>
+    );
+  }
 
   const deletePermanently = async () => {
     if (
@@ -180,6 +200,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
           {session.versionsVisible && (
             <VersionPanel
               versions={session.versions}
+              users={props.users}
               loading={session.versionsLoading}
               error={session.versionsError}
             />

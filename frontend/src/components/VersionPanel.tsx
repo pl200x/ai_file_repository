@@ -1,14 +1,16 @@
 import { formatDateTime, userName } from "../format";
-import type { FileVersion } from "../types";
+import type { FileVersion, UserSummary } from "../types";
 
 interface VersionPanelProps {
   versions: FileVersion[];
+  users: UserSummary[];
   loading: boolean;
   error: string | null;
 }
 
 export function VersionPanel({
   versions,
+  users,
   loading,
   error,
 }: VersionPanelProps) {
@@ -21,7 +23,7 @@ export function VersionPanel({
             <div className="version-no">v{version.versionNo}</div>
             <div className="version-meta">{version.title || "未命名版本"}</div>
             <div className="version-meta">
-              {userName(version.editorId)} ·{" "}
+              {userName(version.editorId, users)} ·{" "}
               {formatDateTime(version.openTime)}
             </div>
           </li>

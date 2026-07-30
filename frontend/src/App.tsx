@@ -25,6 +25,7 @@ import { parseRoute, routes } from "./routing";
 import type {
   FileDocument,
   KnowledgeRepository,
+  UserSummary,
 } from "./types";
 
 export default function App() {
@@ -36,6 +37,8 @@ export default function App() {
   );
   const { toast, showToast } = useToast();
   const [userId, setUserId] = useState(DEFAULT_USER_ID);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [repositories, setRepositories] = useState<
     KnowledgeRepository[]
   >([]);
@@ -55,6 +58,39 @@ export default function App() {
   >(null);
   const [creatingDocument, setCreatingDocument] = useState(false);
   const documentRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadUsers = async () => {
+      setUsersLoading(true);
+      try {
+        const response = await api.listUsers(
+          TENANT_ID,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) {
+          const nextUsers = response.data ?? [];
+          setUsers(nextUsers);
+          setUserId((currentUserId) =>
+            nextUsers.some((user) => user.id === currentUserId)
+              ? currentUserId
+              : (nextUsers[0]?.id ?? currentUserId),
+          );
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setUsers([]);
+          showToast(`用户列表加载失败：${errorMessage(error)}`);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setUsersLoading(false);
+        }
+      }
+    };
+    void loadUsers();
+    return () => controller.abort();
+  }, [showToast]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -378,7 +414,12 @@ export default function App() {
 
   return (
     <>
-      <TopBar userId={userId} onUserChange={handleUserChange} />
+      <TopBar
+        userId={userId}
+        users={users}
+        loading={usersLoading}
+        onUserChange={handleUserChange}
+      />
       <div className="layout">
         <RepositorySidebar
           repositories={repositories}
@@ -393,6 +434,7 @@ export default function App() {
         {route.mode === "trash" ? (
           <TrashBinPage
             documents={trashDocuments}
+            users={users}
             loading={trashLoading}
             deletingFileId={deletingFileId}
             restoringFileId={restoringFileId}
@@ -413,6 +455,7 @@ export default function App() {
                   `知识库 #${route.targetId}`
             }
             userId={userId}
+            users={users}
             showToast={showToast}
             onBack={() => {
               if (route.fileId !== null) {
@@ -429,6 +472,7 @@ export default function App() {
             <DocumentList
               repositoryTitle={currentRepository?.title ?? "文档"}
               documents={documents}
+              users={users}
               selectedFileId={
                 route.mode === "edit" ? route.fileId : null
               }
@@ -465,6 +509,7 @@ export default function App() {
                   route.mode === "new" ? route.versionNo : undefined
                 }
                 userId={userId}
+                users={users}
                 showToast={showToast}
                 refreshDocuments={refreshCurrentDocuments}
                 onCreated={handleCreated}

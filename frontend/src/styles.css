@@ -308,6 +308,146 @@ textarea:focus-visible {
   font-size: 42px;
 }
 
+.file-access-state {
+  min-height: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 36px 24px;
+  background:
+    radial-gradient(circle at 50% 26%, #effaf4 0, transparent 38%),
+    #f7f8f8;
+}
+
+.file-access-card {
+  width: min(100%, 520px);
+  padding: 30px;
+  background: #fff;
+  border: 1px solid #ccebdd;
+  border-radius: 14px;
+  box-shadow: 0 12px 34px rgba(31, 91, 63, 0.09);
+}
+
+.file-access-lock {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  background: var(--bg-active);
+  border-radius: 12px;
+  font-size: 23px;
+}
+
+.file-access-eyebrow {
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.file-access-card h1 {
+  margin-top: 5px;
+  font-size: 23px;
+}
+
+.file-access-description {
+  margin: 9px 0 22px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.file-access-levels {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.file-access-levels legend,
+.file-access-expiration > span {
+  margin-bottom: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.file-access-level {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.file-access-level:hover,
+.file-access-level.selected {
+  background: var(--bg-active);
+  border-color: #9ed7bd;
+}
+
+.file-access-level input {
+  accent-color: var(--green);
+}
+
+.file-access-level span {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-access-level strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.file-access-level small {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.file-access-expiration {
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+}
+
+.file-access-expiration select {
+  height: 38px;
+  padding: 0 10px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.file-access-submitted {
+  margin-top: 14px;
+  padding: 9px 11px;
+  color: var(--green-dark);
+  background: var(--bg-active);
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.file-access-submit,
+.file-access-retry {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.file-access-retry {
+  margin-top: 8px;
+}
+
 .editor-main {
   flex: 1;
   display: flex;

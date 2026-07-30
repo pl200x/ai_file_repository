@@ -1,11 +1,18 @@
-import { DEMO_USERS } from "../config";
+import type { UserSummary } from "../types";
 
 interface TopBarProps {
   userId: number;
+  users: UserSummary[];
+  loading: boolean;
   onUserChange: (userId: number) => void;
 }
 
-export function TopBar({ userId, onUserChange }: TopBarProps) {
+export function TopBar({
+  userId,
+  users,
+  loading,
+  onUserChange,
+}: TopBarProps) {
   return (
     <header className="topbar">
       <div className="brand">
@@ -23,12 +30,19 @@ export function TopBar({ userId, onUserChange }: TopBarProps) {
           className="user-select"
           value={userId}
           onChange={(event) => onUserChange(Number(event.target.value))}
+          disabled={loading || users.length === 0}
         >
-          {DEMO_USERS.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
+          {users.length === 0 ? (
+            <option value={userId}>
+              {loading ? "正在加载用户…" : `用户 ID ${userId}`}
             </option>
-          ))}
+          ) : (
+            users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))
+          )}
         </select>
       </div>
     </header>

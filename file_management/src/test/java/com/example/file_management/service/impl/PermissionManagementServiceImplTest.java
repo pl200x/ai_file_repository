@@ -15,6 +15,8 @@ import com.example.file_management.service.KnowledgeRepositoryService;
 import com.example.file_management.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -93,21 +95,64 @@ class PermissionManagementServiceImplTest {
         verify(permissionIntegration).approvePermission("FILE", 42, 9);
     }
 
-    @Test
-    void selfRequest_doesNotRequireManageablePermission() {
+    @ParameterizedTest
+    @ValueSource(strings = {"READABLE", "WRITABLE", "MANAGEABLE"})
+    void selfRequest_supportsEveryPermissionLevel(
+            String permissionLevel) {
         stubFileAndActor(9);
         when(permissionIntegration.checkPermissionByTypeTargetUserId(
-                "FILE", 42, 9, "WRITABLE")).thenReturn(false);
+                "FILE", 42, 9, permissionLevel)).thenReturn(false);
 
         permissionManagementService.requestPermission(
                 new RequestPermissionDTO(
-                        9, 9, "FILE", 42, "WRITABLE",
+                        9, 9, "FILE", 42, permissionLevel,
                         259_200_000L));
 
-        verify(permissionIntegration, never())
-                .checkPermissionByTypeTargetUserId(
-                        "FILE", 42, 9, "MANAGEABLE");
         verify(permissionIntegration)
+                .checkPermissionByTypeTargetUserId(
+                        "FILE", 42, 9, permissionLevel);
+        ArgumentCaptor<PermissionDTO> captor =
+                ArgumentCaptor.forClass(PermissionDTO.class);
+        verify(permissionIntegration)
+                .givePermissionByUserID(captor.capture());
+        assertEquals(permissionLevel, captor.getValue().getPermission());
+    }
+
+    @Test
+    void managerCanInviteSameTenantUserFromAnotherRepository() {
+        stubFileAndActor();
+        when(userService.queryById(9))
+                .thenReturn(user(9, "Other repository member"));
+        when(permissionIntegration.checkPermissionByTypeTargetUserId(
+                "FILE", 42, 1, "MANAGEABLE")).thenReturn(true);
+        when(permissionIntegration.checkPermissionByTypeTargetUserId(
+                "FILE", 42, 9, "READABLE")).thenReturn(false);
+
+        permissionManagementService.inviteUser(new InvitationDTO(
+                1, 9, "FILE", 42, "READABLE", true,
+                86_400_000L));
+
+        verify(permissionIntegration)
+                .givePermissionByUserID(any(PermissionDTO.class));
+        verify(permissionIntegration, never())
+                .approvePermission("FILE", 42, 9);
+    }
+
+    @Test
+    void managerCannotInviteUserFromAnotherTenant() {
+        stubFileAndActor();
+        User crossTenantUser = user(9, "Outside");
+        crossTenantUser.setTenantId(4);
+        when(userService.queryById(9)).thenReturn(crossTenantUser);
+
+        assertThrows(
+                UserPermissionDeniedException.class,
+                () -> permissionManagementService.inviteUser(
+                        new InvitationDTO(
+                                1, 9, "FILE", 42, "READABLE",
+                                true, 86_400_000L)));
+
+        verify(permissionIntegration, never())
                 .givePermissionByUserID(any(PermissionDTO.class));
     }
 

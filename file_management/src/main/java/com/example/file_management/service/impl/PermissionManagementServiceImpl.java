@@ -88,7 +88,9 @@ public class PermissionManagementServiceImpl implements PermissionManagementServ
                 invitationDTO.requestUserId(),
                 invitationDTO.targetType(),
                 invitationDTO.targetId());
-        requireUser(invitationDTO.targetUserId());
+        requireSameTenantUsers(
+                invitationDTO.requestUserId(),
+                invitationDTO.targetUserId());
         requireManageable(
                 invitationDTO.requestUserId(),
                 targetType,
@@ -125,7 +127,9 @@ public class PermissionManagementServiceImpl implements PermissionManagementServ
                 requestPermissionDTO.requestUserId(),
                 requestPermissionDTO.targetType(),
                 requestPermissionDTO.targetId());
-        requireUser(requestPermissionDTO.targetUserId());
+        requireSameTenantUsers(
+                requestPermissionDTO.requestUserId(),
+                requestPermissionDTO.targetUserId());
         if (requestPermissionDTO.requestUserId()
                 != requestPermissionDTO.targetUserId()) {
             requireManageable(
@@ -297,6 +301,17 @@ public class PermissionManagementServiceImpl implements PermissionManagementServ
                     "The target user does not exist");
         }
         return user;
+    }
+
+    private void requireSameTenantUsers(
+            int requestUserId,
+            int targetUserId) {
+        User requestUser = requireUser(requestUserId);
+        User targetUser = requireUser(targetUserId);
+        if (requestUser.getTenantId() != targetUser.getTenantId()) {
+            throw new UserPermissionDeniedException(
+                    "The requesting user and invited user belong to different tenants");
+        }
     }
 
     private String normalizeTargetType(String targetType) {
