@@ -1,6 +1,11 @@
-export interface DemoUser {
+export interface UserSummary {
   id: number;
   name: string;
+  email: string;
+  tenantId: number;
+  groupId: number;
+  profile?: string | null;
+  createTime?: string | number | null;
 }
 
 export type PermissionTargetType = "FILE" | "KNOWLEDGE_REPOSITORY";

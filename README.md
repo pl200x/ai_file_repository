@@ -55,12 +55,15 @@ object lifecycle, and migration of existing Base64 versions must be handled.
 Requirements: Java 17, Node.js 22+, MySQL, and Docker.
 
 ```bash
-export DB_USERNAME=root
-export DB_PASSWORD=your-local-password
+cp .env.example .env
+# Edit .env with your local database username and password.
 
 docker compose up -d
 ./script/start-all.sh
 ```
+
+`script/start-all.sh` automatically loads the root `.env` file. The file is
+ignored by Git so local database credentials are not committed.
 
 The services use MySQL databases `file_management` and `permission_system`.
 The UI runs at `http://127.0.0.1:5173`; APIs run on ports `8087` and `8086`.

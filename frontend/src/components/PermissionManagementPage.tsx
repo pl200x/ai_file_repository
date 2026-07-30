@@ -6,7 +6,6 @@ import {
 } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api";
-import { DEMO_USERS } from "../config";
 import { errorMessage, formatDateTime } from "../format";
 import {
   EXPIRATION_OPTIONS,
@@ -17,6 +16,7 @@ import {
 import type {
   PermissionLevel,
   PermissionTargetType,
+  UserSummary,
   UserPermission,
 } from "../types";
 
@@ -25,6 +25,7 @@ interface PermissionManagementPageProps {
   targetId: number;
   targetTitle: string;
   userId: number;
+  users: UserSummary[];
   onBack: () => void;
   showToast: (message: string, success?: boolean) => void;
 }
@@ -39,11 +40,12 @@ export function PermissionManagementPage({
   targetId,
   targetTitle,
   userId,
+  users,
   onBack,
   showToast,
 }: PermissionManagementPageProps) {
   const defaultInviteeId =
-    DEMO_USERS.find((user) => user.id !== userId)?.id ?? userId;
+    users.find((user) => user.id !== userId)?.id ?? userId;
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -64,12 +66,15 @@ export function PermissionManagementPage({
   );
 
   useEffect(() => {
-    if (inviteeId === userId) {
+    if (
+      inviteeId === userId ||
+      !users.some((user) => user.id === inviteeId)
+    ) {
       const alternative =
-        DEMO_USERS.find((user) => user.id !== userId)?.id ?? userId;
+        users.find((user) => user.id !== userId)?.id ?? userId;
       setInviteeId(alternative);
     }
-  }, [inviteeId, userId]);
+  }, [inviteeId, userId, users]);
 
   const loadPermissions = useCallback(
     async (signal?: AbortSignal) => {
@@ -421,12 +426,15 @@ export function PermissionManagementPage({
                   setInviteeId(Number(event.target.value))
                 }
               >
-                {DEMO_USERS.filter((user) => user.id !== userId).map(
+                {users.filter((user) => user.id !== userId).map(
                   (user) => (
                     <option key={user.id} value={user.id}>
                       {user.name}（ID {user.id}）
                     </option>
                   ),
+                )}
+                {!users.some((user) => user.id !== userId) && (
+                  <option value={userId}>暂无可邀请用户</option>
                 )}
               </select>
             </label>
@@ -456,7 +464,11 @@ export function PermissionManagementPage({
             <button
               type="submit"
               className="btn btn-primary permission-submit"
-              disabled={inviting || inviteeId === userId}
+              disabled={
+                inviting ||
+                inviteeId === userId ||
+                !users.some((user) => user.id === inviteeId)
+              }
             >
               {inviting ? "发送邀请中…" : "发送邀请"}
             </button>

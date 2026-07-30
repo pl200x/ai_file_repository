@@ -1,8 +1,9 @@
 import { formatDateTime, userName } from "../format";
-import type { FileDocument } from "../types";
+import type { FileDocument, UserSummary } from "../types";
 
 interface TrashBinPageProps {
   documents: FileDocument[];
+  users: UserSummary[];
   loading: boolean;
   deletingFileId: number | null;
   restoringFileId: number | null;
@@ -12,6 +13,7 @@ interface TrashBinPageProps {
 
 export function TrashBinPage({
   documents,
+  users,
   loading,
   deletingFileId,
   restoringFileId,
@@ -53,7 +55,7 @@ export function TrashBinPage({
                     {document.title}
                   </span>
                   <span className="trash-file-meta">
-                    {userName(document.ownerId)} · 移入于{" "}
+                    {userName(document.ownerId, users)} · 移入于{" "}
                     {formatDateTime(document.recentUpdateTime)}
                   </span>
                 </div>

@@ -1,9 +1,10 @@
 import { formatDateTime, userName } from "../format";
-import type { FileDocument } from "../types";
+import type { FileDocument, UserSummary } from "../types";
 
 interface DocumentListProps {
   repositoryTitle: string;
   documents: FileDocument[];
+  users: UserSummary[];
   selectedFileId: number | null;
   loading: boolean;
   canCreate: boolean;
@@ -16,6 +17,7 @@ interface DocumentListProps {
 export function DocumentList({
   repositoryTitle,
   documents,
+  users,
   selectedFileId,
   loading,
   canCreate,
@@ -61,7 +63,7 @@ export function DocumentList({
             >
               <span className="doc-item-title">{document.title}</span>
               <span className="doc-item-meta">
-                {userName(document.ownerId)} · 更新于{" "}
+                {userName(document.ownerId, users)} · 更新于{" "}
                 {formatDateTime(document.recentUpdateTime)}
               </span>
             </button>

@@ -1,4 +1,4 @@
-import { DEMO_USERS } from "./config";
+import type { UserSummary } from "./types";
 
 export function formatDateTime(value: string | number | null | undefined) {
   if (value == null) return "";
@@ -13,8 +13,11 @@ export function formatClock(date: Date) {
   return `${part(date.getHours())}:${part(date.getMinutes())}:${part(date.getSeconds())}`;
 }
 
-export function userName(userId: number) {
-  return DEMO_USERS.find((user) => user.id === userId)?.name ?? `user${userId}`;
+export function userName(userId: number, users: UserSummary[]) {
+  return (
+    users.find((user) => user.id === userId)?.name ??
+    `用户 ID ${userId}`
+  );
 }
 
 export function errorMessage(error: unknown) {

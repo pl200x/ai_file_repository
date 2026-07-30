@@ -11,6 +11,7 @@ import {
   loadDraft,
   saveDraft,
 } from "../draftStorage";
+import { isFileAccessDenied } from "../fileAccess";
 import { errorMessage, formatClock } from "../format";
 import { resolveSubmitTitle } from "../documentTitle";
 import {
@@ -92,6 +93,8 @@ export function useEditorSession({
   );
   const [loading, setLoading] = useState(mode === "edit");
   const [ready, setReady] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [latestVersionNo, setLatestVersionNo] = useState(() =>
@@ -474,6 +477,7 @@ export function useEditorSession({
         setVersions(versionList);
         updateDefaultTitle(identifier);
         advanceLatestVersionNo(latestVersion.versionNo);
+        setAccessDenied(false);
         setLoading(false);
         setReady(true);
         setSaveStatus(
@@ -481,6 +485,13 @@ export function useEditorSession({
         );
       } catch (error) {
         if (controller.signal.aborted || !activeRef.current) return;
+        setLoading(false);
+        setReady(false);
+        if (isFileAccessDenied(error)) {
+          setAccessDenied(true);
+          setSaveStatus("等待访问权限");
+          return;
+        }
         const message = errorMessage(error);
         showToast(`文档加载失败：${message}`);
         onLoadFailure();
@@ -497,7 +508,12 @@ export function useEditorSession({
     advanceLatestVersionNo,
     updateDefaultTitle,
     userId,
+    reloadToken,
   ]);
+
+  const retryLoad = useCallback(() => {
+    setReloadToken((current) => current + 1);
+  }, []);
 
   const updateDraft = useCallback(
     (field: keyof DraftContent, value: string) => {
@@ -682,6 +698,7 @@ export function useEditorSession({
     dirty: !sameDraft(draft, lastSaved),
     loading,
     ready,
+    accessDenied,
     saving,
     submitting,
     saveStatus,
@@ -692,6 +709,7 @@ export function useEditorSession({
     versionsError,
     updateDraft,
     toggleVersions,
+    retryLoad,
     submit,
   };
 }
