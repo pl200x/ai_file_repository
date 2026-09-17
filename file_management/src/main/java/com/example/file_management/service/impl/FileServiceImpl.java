@@ -5,6 +5,7 @@ import com.example.file_management.controller.dto.DeleteFileDTO;
 import com.example.file_management.controller.dto.FileVersionDTO;
 import com.example.file_management.controller.dto.UpdateFileDTO;
 import com.example.file_management.controller.vo.FileWriteResultVO;
+import com.example.file_management.entity.ChunkSplittingMessage;
 import com.example.file_management.entity.File;
 import com.example.file_management.entity.FileVersion;
 import com.example.file_management.entity.KnowledgeRepository;
@@ -22,8 +23,10 @@ import com.example.file_management.mapper.FileMapper;
 import com.example.file_management.mapper.FileVersionMapper;
 import com.example.file_management.mapper.KnowledgeRepositoryMapper;
 import com.example.file_management.mapper.UserMapper;
+import com.example.file_management.service.ChunkService;
 import com.example.file_management.service.FileService;
 import com.example.file_management.service.FileVersionService;
+import com.example.file_management.service.producer.ChunkSplittingProducer;
 import com.example.file_management.service.producer.PermissionBatchGivingProducer;
 import com.example.file_management.util.InfinityDateTime;
 import org.slf4j.Logger;
@@ -63,6 +66,10 @@ public class FileServiceImpl implements FileService {
     private PermissionBatchGivingProducer permissionBatchGivingProducer;
     @Autowired
     private FileVersionService fileVersionService;
+    @Autowired
+    private ChunkSplittingProducer chunkSplittingProducer;
+    @Autowired
+    private ChunkService chunkService;
     @Override
     @Transactional
     public FileWriteResultVO addFile(AddFileDTO fileDTO, FileVersionDTO fileVersionDTO) {
@@ -138,23 +145,46 @@ public class FileServiceImpl implements FileService {
         //owner上面已单独授权，batch里再出现会撞唯一键导致整批失败
         levelByUserId.remove(fileDTO.ownerId());
 
-        if (levelByUserId.isEmpty()) {
-            return result;
+        //名单为空说明库里只有owner一个人，没有要批量授权的成员；
+        //切分与向量化和成员名单无关，不能一起被跳过，所以只跳过发批量授权这一步
+        if (!levelByUserId.isEmpty()) {
+            List<PermissionDTO> permissionDTOList = new ArrayList<>();
+            for (Map.Entry<Integer, String> entry : levelByUserId.entrySet()) {
+                PermissionDTO currentDTO = new PermissionDTO();
+                currentDTO.setUserId(entry.getKey());
+                currentDTO.setPermission(entry.getValue());
+                currentDTO.setType(PermissionTargetType.FILE.getCode());
+                currentDTO.setTargetId(addedFileId);
+                currentDTO.setExpirationTime(InfinityDateTime.getInfinityDate().getTime() - System.currentTimeMillis());
+                permissionDTOList.add(currentDTO);
+            }
+            //owner之外的成员授权走kafka异步：addFile不再等permission服务的batch落库
+            permissionBatchGivingProducer.sendBatchGiving(permissionDTOList);
         }
 
-        List<PermissionDTO> permissionDTOList = new ArrayList<>();
-        for (Map.Entry<Integer, String> entry : levelByUserId.entrySet()) {
-            PermissionDTO currentDTO = new PermissionDTO();
-            currentDTO.setUserId(entry.getKey());
-            currentDTO.setPermission(entry.getValue());
-            currentDTO.setType(PermissionTargetType.FILE.getCode());
-            currentDTO.setTargetId(addedFileId);
-            currentDTO.setExpirationTime(InfinityDateTime.getInfinityDate().getTime() - System.currentTimeMillis());
-            permissionDTOList.add(currentDTO);
-        }
-        //owner之外的成员授权走kafka异步：addFile不再等permission服务的batch落库
-        permissionBatchGivingProducer.sendBatchGiving(addedFileId, permissionDTOList);
+        //切分+embedding+双写（Milvus和chunks表）耗时且依赖外部模型服务，
+        //同样走kafka异步：addFile只负责把文件和首版本落库，失败由DLT兜底而不是回滚建档
+        publishChunkSplitting(addedFileId, effectiveTitle, fileDTO.content(),
+                fileDTO.ownerId(), fileDTO.repositoryId(), true);
         return result;
+    }
+
+    //正文变了必须重切；没变时索引理应已经在，只有确实缺失才补一条。
+    //producer发送失败只记日志、消费失败进DLT，这两种情况下首次投递是静默丢失的，
+    //而无脑重发会让每次保存都重跑一遍embedding（按token计费），所以先查一次再决定
+    private void publishChunkSplitting(
+            int fileId,
+            String fileName,
+            String content,
+            int ownerId,
+            int repositoryId,
+            boolean contentChanged) {
+        if (!contentChanged
+                && !chunkService.queryByRepositoryIdAndFileId(repositoryId, fileId).isEmpty()) {
+            return;
+        }
+        chunkSplittingProducer.sendChunkSplitting(new ChunkSplittingMessage(
+                fileId, fileName, content, ownerId, repositoryId));
     }
 
     private List<Integer> parseIdList(String idList) {
@@ -210,6 +240,10 @@ public class FileServiceImpl implements FileService {
                 && same(existing.getContent(), fileDTO.content())
                 && same(latest.getTitle(), effectiveTitle)
                 && same(latest.getContent(), fileDTO.content())) {
+            //什么都没写，正常情况下建档时那条切分消息已经把索引做好了；
+            //但首次投递可能静默丢失，所以这里只做"缺了才补"的检查，不无条件重发
+            publishChunkSplitting(existing.getId(), effectiveTitle, fileDTO.content(),
+                    existing.getOwnerId(), existing.getRepositoryId(), false);
             return new FileWriteResultVO(
                     existing.getId(), latest.getVersionNo(), defaultTitle, effectiveTitle);
         }
@@ -227,7 +261,11 @@ public class FileServiceImpl implements FileService {
                 effectiveTitle, fileDTO.content(), fileDTO.ownerId(),
                 fileVersionDTO.openTime(), fileVersionDTO.lastMergeTime(),
                 existing.getRepositoryId(), existing.getTenantId(), defaultTitle);
-        return fileVersionService.addFileVersion(retryVersion);
+        FileWriteResultVO retryResult = fileVersionService.addFileVersion(retryVersion);
+        //入口是addfile，但这条分支写的是新正文，等价于一次修改
+        publishChunkSplitting(existing.getId(), effectiveTitle, fileDTO.content(),
+                existing.getOwnerId(), existing.getRepositoryId(), true);
+        return retryResult;
     }
 
     private String requireDefaultTitle(String defaultTitle) {
@@ -441,6 +479,9 @@ public class FileServiceImpl implements FileService {
                 updateFileDTO.title(), updateFileDTO.content(), updateFileDTO.autoTitle(),
                 file.getTenantId(), file.getRepositoryId(), file.getId());
 
+        //buildFile会原地改写file对象，旧正文必须在那之前取出来比
+        boolean contentChanged = !same(file.getContent(), updateFileDTO.content());
+
         int affectedRows = fileMapper.updateFile(
                 buildFile(updateFileDTO, file, effectiveTitle));
         if (affectedRows != 1) {
@@ -455,7 +496,11 @@ public class FileServiceImpl implements FileService {
                 effectiveTitle, updateFileDTO.content(), fileVersionDTO.editorId(),
                 fileVersionDTO.openTime(), fileVersionDTO.lastMergeTime(), file.getRepositoryId(), file.getTenantId(),
                 defaultTitle);
-        return fileVersionService.addFileVersion(versionDTO);
+        FileWriteResultVO result = fileVersionService.addFileVersion(versionDTO);
+        //ownerId取文件所有者而不是本次编辑人：chunk的归属跟着文件走，不随每次编辑漂移
+        publishChunkSplitting(file.getId(), effectiveTitle, updateFileDTO.content(),
+                file.getOwnerId(), file.getRepositoryId(), contentChanged);
+        return result;
     }
 
     @Override
@@ -648,6 +693,8 @@ public class FileServiceImpl implements FileService {
         file.setOwnerId(fileDTO.ownerId());
         file.setTitle(fileDTO.title());
         file.setContent(fileDTO.content() == null ? "" : fileDTO.content());
+        file.setContentFormat(fileDTO.contentFormat() == null || fileDTO.contentFormat().isBlank()
+                ? File.CONTENT_FORMAT_PLAIN : fileDTO.contentFormat());
         file.setWriterList(fileDTO.writableList());
         file.setReaderList(fileDTO.readableList());
         file.setManageableList(fileDTO.manageableList());

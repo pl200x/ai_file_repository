@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { api } from "../api";
+import { useTranslation } from "../i18n";
 import type { FileDocument, UserSummary } from "../types";
 import { useEditorSession } from "../hooks/useEditorSession";
 import { DocumentContentEditor } from "./DocumentContentEditor";
 import { FileAccessRequestPanel } from "./FileAccessRequestPanel";
+import { MarkdownPreview } from "./MarkdownPreview";
 import { VersionPanel } from "./VersionPanel";
 
 interface EditorWorkspaceProps {
@@ -23,10 +26,24 @@ interface EditorWorkspaceProps {
 }
 
 export function EditorWorkspace(props: EditorWorkspaceProps) {
+  const { t } = useTranslation();
   const session = useEditorSession(props);
   const [deletingPermanently, setDeletingPermanently] =
     useState(false);
   const [movingToTrash, setMovingToTrash] = useState(false);
+  const [viewMode, setViewMode] = useState<"edit" | "preview">(
+    "edit",
+  );
+  //只在文档首次加载完成时按来源格式选一次默认视图；
+  //之后用户手动切换不应该被内容变化再次覆盖
+  const appliedDefaultViewRef = useRef(false);
+  useEffect(() => {
+    if (appliedDefaultViewRef.current || session.loading) return;
+    appliedDefaultViewRef.current = true;
+    if (session.contentFormat === "MARKDOWN") {
+      setViewMode("preview");
+    }
+  }, [session.loading, session.contentFormat]);
 
   if (
     props.mode === "edit" &&
@@ -51,7 +68,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
       props.fileId === null ||
       deletingPermanently ||
       movingToTrash ||
-      !window.confirm("永久删除后无法恢复，确定继续吗？")
+      !window.confirm(t("永久删除后无法恢复，确定继续吗？"))
     ) {
       return;
     }
@@ -69,7 +86,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
       props.fileId === null ||
       deletingPermanently ||
       movingToTrash ||
-      !window.confirm("确定将文档移入回收站吗？")
+      !window.confirm(t("确定将文档移入回收站吗？"))
     ) {
       return;
     }
@@ -88,13 +105,13 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
         <div className="editor-header">
           <div className="editor-status-row">
             <span className="mode-badge">
-              {props.mode === "new" ? "新建文档" : "编辑文档"}
+              {props.mode === "new" ? t("新建文档") : t("编辑文档")}
             </span>
             <span
               className={`dirty-dot ${session.dirty ? "dirty" : ""}`}
-              title={session.dirty ? "存在未保存更改" : "内容已保存"}
+              title={session.dirty ? t("存在未保存更改") : t("内容已保存")}
             />
-            <span className="save-status">{session.saveStatus}</span>
+            <span className="save-status">{t(session.saveStatus)}</span>
           </div>
           <div className="editor-actions">
             {props.mode === "edit" && (
@@ -115,7 +132,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
                     deletingPermanently
                   }
                 >
-                  权限管理
+                  {t("权限管理")}
                 </button>
                 <button
                   type="button"
@@ -130,8 +147,8 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
                   }
                 >
                   {deletingPermanently
-                    ? "永久删除中…"
-                    : "永久删除"}
+                    ? t("永久删除中…")
+                    : t("永久删除")}
                 </button>
                 <button
                   type="button"
@@ -145,10 +162,34 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
                     deletingPermanently
                   }
                 >
-                  {movingToTrash ? "正在移入…" : "移入回收站"}
+                  {movingToTrash ? t("正在移入…") : t("移入回收站")}
                 </button>
+                {props.fileId !== null && (
+                  <a
+                    className="btn btn-ghost btn-sm"
+                    href={api.exportPdfUrl(props.fileId, props.userId)}
+                    title={t("下载当前已保存版本的 PDF")}
+                  >
+                    {t("下载 PDF")}
+                  </a>
+                )}
               </>
             )}
+            <button
+              type="button"
+              className={`btn btn-ghost btn-sm ${
+                viewMode === "preview" ? "active" : ""
+              }`}
+              onClick={() =>
+                setViewMode((mode) =>
+                  mode === "preview" ? "edit" : "preview",
+                )
+              }
+              disabled={session.loading}
+              title={t("按 Markdown 语法渲染正文格式")}
+            >
+              {viewMode === "preview" ? t("编辑") : t("预览格式")}
+            </button>
             <button
               type="button"
               className={`btn btn-ghost btn-sm ${
@@ -157,7 +198,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
               onClick={session.toggleVersions}
               aria-expanded={session.versionsVisible}
             >
-              版本历史
+              {t("版本历史")}
             </button>
             <button
               type="button"
@@ -169,7 +210,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
                 session.submitting
               }
             >
-              {session.submitting ? "提交中…" : "提 交"}
+              {session.submitting ? t("提交中…") : t("提 交")}
             </button>
           </div>
         </div>
@@ -180,23 +221,27 @@ export function EditorWorkspace(props: EditorWorkspaceProps) {
           onChange={(event) =>
             session.updateDraft("title", event.target.value)
           }
-          placeholder={session.loading ? "正在加载…" : "请输入标题"}
+          placeholder={session.loading ? t("正在加载…") : t("请输入标题")}
           autoComplete="off"
-          aria-label="文档标题"
+          aria-label={t("文档标题")}
           disabled={session.loading || session.submitting}
         />
         <div className="editor-body">
-          <DocumentContentEditor
-            value={session.draft.content}
-            onChange={(content) =>
-              session.updateDraft("content", content)
-            }
-            onError={(message) => props.showToast(message)}
-            placeholder={
-              session.loading ? "正在加载文档内容…" : "开始书写正文…"
-            }
-            disabled={session.loading || session.submitting}
-          />
+          {viewMode === "preview" ? (
+            <MarkdownPreview content={session.draft.content} />
+          ) : (
+            <DocumentContentEditor
+              value={session.draft.content}
+              onChange={(content) =>
+                session.updateDraft("content", content)
+              }
+              onError={(message) => props.showToast(message)}
+              placeholder={
+                session.loading ? t("正在加载文档内容…") : t("开始书写正文…")
+              }
+              disabled={session.loading || session.submitting}
+            />
+          )}
           {session.versionsVisible && (
             <VersionPanel
               versions={session.versions}

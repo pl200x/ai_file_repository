@@ -82,3 +82,22 @@ test("file permission routes preserve both repository and file context", () => {
     targetId: 42,
   });
 });
+
+test("the search page has its own route", () => {
+  assert.deepEqual(parseRoute(routes.search), {
+    mode: "search",
+    repoId: null,
+    fileId: null,
+  });
+  //末尾斜杠是同一个页面，不该掉回首页
+  assert.equal(parseRoute("/search/").mode, "search");
+});
+
+test("the AI customer-support page has its own route", () => {
+  assert.equal(routes.assistant, "/assistant");
+  assert.deepEqual(parseRoute("/assistant/"), {
+    mode: "assistant",
+    repoId: null,
+    fileId: null,
+  });
+});

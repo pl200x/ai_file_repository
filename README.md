@@ -6,8 +6,8 @@ workflows, and a React management UI.
 ## Structure
 
 - `frontend`: React, TypeScript, and Vite.
-- `file_management`: document, repository, version, trash, and application-level
-  permission APIs.
+- `file_management`: document, repository, version, trash, application-level
+  permission APIs, and the permission-aware AI customer-support agent.
 - `permission`: permission records and state transitions.
 - `script`: schema migrations and local start/stop scripts.
 - `docker-compose.yml`: local Kafka broker for batch permission propagation.
@@ -73,3 +73,7 @@ cd frontend && npm test && npm run build
 cd ../permission && ./mvnw test
 cd ../file_management && ./mvnw test
 ```
+
+The AI customer-support endpoint is part of `file_management` on port `8087`.
+See [`file_management/AGENT.md`](file_management/AGENT.md) for its retrieval and
+permission flow.

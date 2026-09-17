@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { api } from "../api";
 import { buildFilePermissionRequest } from "../fileAccess";
 import { errorMessage } from "../format";
+import { useTranslation } from "../i18n";
 import {
   EXPIRATION_OPTIONS,
   PERMISSION_LEVEL_OPTIONS,
@@ -29,6 +30,7 @@ export function FileAccessRequestPanel({
   onRetry,
   showToast,
 }: FileAccessRequestPanelProps) {
+  const { t } = useTranslation();
   const [permissionLevel, setPermissionLevel] =
     useState<PermissionLevel>("READABLE");
   const [expiration, setExpiration] = useState(DEFAULT_EXPIRATION);
@@ -67,15 +69,15 @@ export function FileAccessRequestPanel({
         <div className="file-access-lock" aria-hidden="true">
           🔒
         </div>
-        <span className="file-access-eyebrow">文档 #{fileId}</span>
-        <h1 id="file-access-title">你还没有访问权限</h1>
+        <span className="file-access-eyebrow">{t("文档 #{id}", { id: fileId })}</span>
+        <h1 id="file-access-title">{t("你还没有访问权限")}</h1>
         <p className="file-access-description">
-          选择所需权限并提交申请。管理员批准后，即可打开这份文档。
+          {t("选择所需权限并提交申请。管理员批准后，即可打开这份文档。")}
         </p>
 
         <form onSubmit={(event) => void submitRequest(event)}>
           <fieldset className="file-access-levels">
-            <legend>申请权限</legend>
+            <legend>{t("申请权限")}</legend>
             {PERMISSION_LEVEL_OPTIONS.map((option) => (
               <label
                 className={`file-access-level ${
@@ -94,15 +96,15 @@ export function FileAccessRequestPanel({
                   }}
                 />
                 <span>
-                  <strong>{option.label}</strong>
-                  <small>{option.description}</small>
+                  <strong>{t(option.label)}</strong>
+                  <small>{t(option.description)}</small>
                 </span>
               </label>
             ))}
           </fieldset>
 
           <label className="file-access-expiration">
-            <span>有效期</span>
+            <span>{t("有效期")}</span>
             <select
               value={expiration}
               onChange={(event) => {
@@ -112,7 +114,7 @@ export function FileAccessRequestPanel({
             >
               {EXPIRATION_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.label)}
                 </option>
               ))}
             </select>
@@ -120,7 +122,7 @@ export function FileAccessRequestPanel({
 
           {submitted && (
             <p className="file-access-submitted" role="status">
-              申请已提交。你可以等待审批，或修改选项后更新申请。
+              {t("申请已提交。你可以等待审批，或修改选项后更新申请。")}
             </p>
           )}
 
@@ -130,10 +132,10 @@ export function FileAccessRequestPanel({
             disabled={requesting || checking}
           >
             {requesting
-              ? "提交中…"
+              ? t("提交中…")
               : submitted
-                ? "更新申请"
-                : "提交权限申请"}
+                ? t("更新申请")
+                : t("提交权限申请")}
           </button>
           <button
             type="button"
@@ -141,7 +143,7 @@ export function FileAccessRequestPanel({
             disabled={requesting || checking}
             onClick={onRetry}
           >
-            {checking ? "正在检查权限…" : "重新检查权限"}
+            {checking ? t("正在检查权限…") : t("重新检查权限")}
           </button>
         </form>
       </section>

@@ -18,6 +18,9 @@ import {
   draftFromVersion,
   isEmptyDraft,
   latestFileVersion,
+  pendingOwnDraft,
+  sameDraft,
+  shouldLoadChainHeadContent,
 } from "../versionRecovery";
 import type {
   DraftContent,
@@ -38,10 +41,6 @@ interface UseEditorSessionOptions {
   refreshDocuments: () => Promise<FileDocument[]>;
   onCreated: (fileId: number) => void;
   onLoadFailure: () => void;
-}
-
-function sameDraft(left: DraftContent, right: DraftContent) {
-  return left.title === right.title && left.content === right.content;
 }
 
 export function useEditorSession({
@@ -408,11 +407,20 @@ export function useEditorSession({
           throw new Error("目标文档不存在");
         }
         const file = fileResponse.data;
+        //files.content 只在正式提交时写入，所以它就是"最后一次正式提交的内容"，
+        //这是默认要渲染的东西
+        const committedDraft: DraftContent = {
+          title: file.title ?? "",
+          content: file.content ?? "",
+        };
 
         setVersionsLoading(true);
         setVersionsError(null);
         let versionList: FileVersion[];
-        let latestVersion: FileVersion;
+        let chainHead: FileVersion;
+        //自动保存算个人草稿：链头若是别人的自动保存，拿它渲染就等于让任何有读权限的人
+        //看到别人尚未提交的内容，所以只在链头是自己写的时候才去取正文
+        let ownDraft: DraftContent | null = null;
         try {
           const versionResponse = await api.listVersions(
             fileId,
@@ -431,27 +439,35 @@ export function useEditorSession({
               "目标文档版本链缺少 canonical defaultTitle",
             );
           }
+          chainHead = latestMetadata;
 
-          const detailResponse = await api.queryVersionDetail(
-            fileId,
-            latestMetadata.versionNo,
-            userId,
-            controller.signal,
-          );
-          if (!detailResponse.data) {
-            throw new Error("最新文档版本不存在");
-          }
-          latestVersion = detailResponse.data;
-          const detailIdentifier =
-            latestVersion.defaultTitle?.trim();
-          if (!detailIdentifier) {
-            throw new Error(
-              "最新文档版本缺少 canonical defaultTitle",
+          if (shouldLoadChainHeadContent(latestMetadata, userId)) {
+            const detailResponse = await api.queryVersionDetail(
+              fileId,
+              latestMetadata.versionNo,
+              userId,
+              controller.signal,
             );
-          }
-          if (detailIdentifier !== metadataIdentifier) {
-            throw new Error(
-              "版本列表与最新版本的 defaultTitle 不一致",
+            if (!detailResponse.data) {
+              throw new Error("最新文档版本不存在");
+            }
+            const detail = detailResponse.data;
+            const detailIdentifier = detail.defaultTitle?.trim();
+            if (!detailIdentifier) {
+              throw new Error(
+                "最新文档版本缺少 canonical defaultTitle",
+              );
+            }
+            if (detailIdentifier !== metadataIdentifier) {
+              throw new Error(
+                "版本列表与最新版本的 defaultTitle 不一致",
+              );
+            }
+            ownDraft = pendingOwnDraft(
+              latestMetadata,
+              draftFromVersion(detail),
+              committedDraft,
+              userId,
             );
           }
         } catch (error) {
@@ -466,8 +482,8 @@ export function useEditorSession({
         }
 
         if (controller.signal.aborted || !activeRef.current) return;
-        const loadedDraft = draftFromVersion(latestVersion);
-        const identifier = latestVersion.defaultTitle!.trim();
+        const loadedDraft = ownDraft ?? committedDraft;
+        const identifier = chainHead.defaultTitle!.trim();
 
         setLoadedFile(file);
         setDraft(loadedDraft);
@@ -476,12 +492,16 @@ export function useEditorSession({
         lastSavedRef.current = loadedDraft;
         setVersions(versionList);
         updateDefaultTitle(identifier);
-        advanceLatestVersionNo(latestVersion.versionNo);
+        //并发校验仍以真实链头为准，哪怕那一版是别人的草稿：
+        //版本号落后会被服务端判为版本链已变，正是想要的效果
+        advanceLatestVersionNo(chainHead.versionNo);
         setAccessDenied(false);
         setLoading(false);
         setReady(true);
         setSaveStatus(
-          `已加载最新版本 v${latestVersion.versionNo}，内容变化后每 30 秒自动保存`,
+          ownDraft
+            ? `已恢复你未提交的修改（自动保存 v${chainHead.versionNo}），内容变化后每 30 秒自动保存`
+            : "已加载最新正式内容，内容变化后每 30 秒自动保存",
         );
       } catch (error) {
         if (controller.signal.aborted || !activeRef.current) return;
@@ -695,6 +715,7 @@ export function useEditorSession({
 
   return {
     draft,
+    contentFormat: loadedFile?.contentFormat ?? null,
     dirty: !sameDraft(draft, lastSaved),
     loading,
     ready,

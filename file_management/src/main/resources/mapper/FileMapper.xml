@@ -10,6 +10,7 @@
         <result property="ownerId" column="owner_id"/>
         <result property="title" column="title"/>
         <result property="content" column="content"/>
+        <result property="contentFormat" column="content_format"/>
         <result property="writerList" column="writer_list"/>
         <result property="readerList" column="reader_list"/>
         <result property="manageableList" column="manageable_list"/>
@@ -83,13 +84,14 @@
     <!-- service 层创建时把 latestModifiedUserId 设为 ownerId；
          回填的 id 之后写 Milvus chunk 元数据要用 -->
     <insert id="addFile" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
-        INSERT INTO files (tenant_id, repository_id, owner_id, title, content,
+        INSERT INTO files (tenant_id, repository_id, owner_id, title, content, content_format,
         writer_list, reader_list, manageable_list, is_private, latest_modified_user_id)
-        VALUES (#{tenantId}, #{repositoryId}, #{ownerId}, #{title}, #{content},
+        VALUES (#{tenantId}, #{repositoryId}, #{ownerId}, #{title}, #{content}, #{contentFormat},
         #{writerList}, #{readerList}, #{manageableList}, #{isPrivate}, #{latestModifiedUserId})
     </insert>
 
 
+    <!-- content_format故意不在这里更新：格式由创建时的来源决定，编辑正文不应该改变渲染方式 -->
     <update id="updateFile">
         UPDATE files SET title = #{title},
         content = #{content},

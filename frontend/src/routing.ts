@@ -5,6 +5,15 @@ export function parseRoute(pathname: string): AppRoute {
   if (normalized === "/trash") {
     return { mode: "trash", repoId: null, fileId: null };
   }
+  if (normalized === "/notifications") {
+    return { mode: "notifications", repoId: null, fileId: null };
+  }
+  if (normalized === "/search") {
+    return { mode: "search", repoId: null, fileId: null };
+  }
+  if (normalized === "/assistant") {
+    return { mode: "assistant", repoId: null, fileId: null };
+  }
 
   const filePermissionsMatch = normalized.match(
     /^\/repo\/(\d+)\/file\/(\d+)\/permissions$/,
@@ -83,6 +92,9 @@ export function parseRoute(pathname: string): AppRoute {
 
 export const routes = {
   trash: "/trash",
+  notifications: "/notifications",
+  search: "/search",
+  assistant: "/assistant",
   repository: (repositoryId: number) => `/repo/${repositoryId}`,
   repositoryPermissions: (repositoryId: number) =>
     `/repo/${repositoryId}/permissions`,

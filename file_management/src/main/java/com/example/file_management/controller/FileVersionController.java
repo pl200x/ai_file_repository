@@ -1,6 +1,7 @@
 package com.example.file_management.controller;
 
 import com.example.file_management.controller.dto.FileVersionDTO;
+import com.example.file_management.controller.vo.DataVO;
 import com.example.file_management.controller.vo.FileWriteResultVO;
 import com.example.file_management.entity.FileVersion;
 import com.example.file_management.exception.CantFindTargetFileException;

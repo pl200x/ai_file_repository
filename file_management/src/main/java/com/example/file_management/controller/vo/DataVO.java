@@ -1,4 +1,4 @@
-package com.example.file_management.controller;
+package com.example.file_management.controller.vo;
 
 //查询类接口的返回体：BaseVO的状态字段 + 数据本体
 public class DataVO<T> extends BaseVO {

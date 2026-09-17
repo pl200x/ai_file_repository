@@ -138,6 +138,19 @@ export function normalizeDocumentContent(
 }
 
 /**
+ * Converts the editor's internal `[[IMAGE:data:...]]` marker syntax into
+ * real Markdown image syntax so `content` can be handed to a Markdown
+ * renderer (react-markdown) unchanged otherwise.
+ */
+export function toMarkdownSource(content: string): string {
+  return parseDocumentContent(content)
+    .map((block) =>
+      block.type === "image" ? `![](${block.dataUrl})` : block.content,
+    )
+    .join("\n\n");
+}
+
+/**
  * Inserts an image on its own line and returns the absolute position of the
  * empty line immediately following it.
  */

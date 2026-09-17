@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.file_management.mapper.NotificationMapper">
+    <!-- read 是 MySQL 保留字，列名用 is_read；Lombok 对 boolean read 生成的
+         isRead()/setRead() 符合 JavaBeans 规范，#{read} 与 property="read" 都能解析 -->
+    <resultMap id="NotificationResultMap" type="com.example.file_management.entity.Notification">
+        <id property="id" column="id"/>
+        <result property="topic" column="topic"/>
+        <result property="applicant" column="applicant"/>
+        <result property="receiverId" column="receiver_id"/>
+        <result property="targetType" column="target_type"/>
+        <result property="targetId" column="target_id"/>
+        <result property="operationContent" column="operation_content"/>
+        <result property="operationTime" column="operation_time"/>
+        <result property="read" column="is_read"/>
+    </resultMap>
+
+    <sql id="notificationColumns">
+        id, topic, applicant, receiver_id, target_type, target_id,
+        operation_content, operation_time, is_read
+    </sql>
+
+    <insert id="addNotification" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO notifications
+        (topic, applicant, receiver_id, target_type, target_id,
+        operation_content, operation_time, is_read)
+        VALUES
+        (#{topic}, #{applicant}, #{receiverId}, #{targetType}, #{targetId},
+        #{operationContent}, #{operationTime}, #{read})
+    </insert>
+
+    <!-- 一个事件要通知目标上全部管理者，批量插入省往返；
+         空列表会让 foreach 生成 VALUES 后无内容的非法 SQL，守卫放在消费侧 -->
+    <insert id="addNotificationList">
+        INSERT INTO notifications
+        (topic, applicant, receiver_id, target_type, target_id,
+        operation_content, operation_time, is_read)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.topic}, #{item.applicant}, #{item.receiverId}, #{item.targetType},
+            #{item.targetId}, #{item.operationContent}, #{item.operationTime}, #{item.read})
+        </foreach>
+    </insert>
+
+    <select id="queryById" resultMap="NotificationResultMap">
+        SELECT <include refid="notificationColumns"/>
+        FROM notifications WHERE id = #{id}
+    </select>
+
+    <!-- 命中 idx_notifications_receiver_read -->
+    <select id="queryUnreadCount" resultType="int">
+        SELECT COUNT(*) FROM notifications
+        WHERE receiver_id = #{receiverId} AND is_read = #{read}
+    </select>
+
+    <!-- 命中 idx_notifications_receiver_time；startIndex 由 service 层从页码换算 -->
+    <select id="queryAll" resultMap="NotificationResultMap">
+        SELECT <include refid="notificationColumns"/>
+        FROM notifications
+        WHERE receiver_id = #{receiverId}
+        ORDER BY operation_time DESC, id DESC
+        LIMIT #{startIndex}, #{pageSize}
+    </select>
+
+    <!-- 分页总数：与queryAll同一个WHERE，命中idx_notifications_receiver_time -->
+    <select id="queryTotalCount" resultType="int">
+        SELECT COUNT(*) FROM notifications WHERE receiver_id = #{receiverId}
+    </select>
+
+    <update id="updateReadStatus">
+        UPDATE notifications SET is_read = #{read} WHERE id = #{id}
+    </update>
+</mapper>

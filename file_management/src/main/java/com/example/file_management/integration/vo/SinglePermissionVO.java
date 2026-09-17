@@ -1,6 +1,6 @@
 package com.example.file_management.integration.vo;
 
-import com.example.file_management.controller.BaseVO;
+import com.example.file_management.controller.vo.BaseVO;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

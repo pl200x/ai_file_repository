@@ -5,25 +5,34 @@ import com.example.file_management.controller.dto.FileVersionDTO;
 import com.example.file_management.controller.dto.UpdateFileDTO;
 import com.example.file_management.controller.vo.FileWriteResultVO;
 import com.example.file_management.entity.File;
+import com.example.file_management.exception.CantFindTargetFileException;
 import com.example.file_management.exception.FileTitleConflictException;
+import com.example.file_management.exception.PdfHasNoExtractableTextException;
 import com.example.file_management.exception.UserPermissionDeniedException;
 import com.example.file_management.service.FileService;
+import com.example.file_management.service.MarkdownExtractionService;
+import com.example.file_management.service.PdfExportService;
+import com.example.file_management.service.PdfExtractionService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,6 +51,12 @@ class FileControllerTest {
 
     @MockitoBean
     private FileService fileService;
+    @MockitoBean
+    private PdfExtractionService pdfExtractionService;
+    @MockitoBean
+    private MarkdownExtractionService markdownExtractionService;
+    @MockitoBean
+    private PdfExportService pdfExportService;
 
     @Test
     void addFile_textOnlyContent_passesContentUnchangedToCreateAndVersionWorkflows() throws Exception {
@@ -209,6 +224,104 @@ class FileControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].id").value(42))
                 .andExpect(jsonPath("$.data[0].deleted").value(true));
+    }
+
+    @Test
+    void uploadPdf_success_delegatesExtractedTextToAddFile() throws Exception {
+        MockMultipartFile pdfPart = new MockMultipartFile(
+                "file", "sample.pdf", "application/pdf", "irrelevant bytes".getBytes());
+        when(pdfExtractionService.extractText(any())).thenReturn("extracted pdf text");
+        when(fileService.addFile(any(AddFileDTO.class), any(FileVersionDTO.class)))
+                .thenReturn(new FileWriteResultVO(42, 1, "draft-pdf-1", "sample"));
+
+        mockMvc.perform(multipart("/api/file/upload_pdf")
+                        .file(pdfPart)
+                        .param("repositoryId", "1")
+                        .param("ownerId", "10")
+                        .param("tenantId", "1")
+                        .param("defaultTitle", "draft-pdf-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.fileId").value(42));
+
+        ArgumentCaptor<AddFileDTO> captor = ArgumentCaptor.forClass(AddFileDTO.class);
+        verify(fileService).addFile(captor.capture(), any(FileVersionDTO.class));
+        assertEquals("extracted pdf text", captor.getValue().content());
+        assertEquals("draft-pdf-1", captor.getValue().defaultTitle());
+        assertEquals(true, captor.getValue().autoTitle());
+    }
+
+    @Test
+    void uploadPdf_noExtractableText_returnsBusinessCode422() throws Exception {
+        MockMultipartFile pdfPart = new MockMultipartFile(
+                "file", "scanned.pdf", "application/pdf", "irrelevant bytes".getBytes());
+        when(pdfExtractionService.extractText(any()))
+                .thenThrow(new PdfHasNoExtractableTextException("no extractable text"));
+
+        mockMvc.perform(multipart("/api/file/upload_pdf")
+                        .file(pdfPart)
+                        .param("repositoryId", "1")
+                        .param("ownerId", "10")
+                        .param("tenantId", "1")
+                        .param("defaultTitle", "draft-pdf-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(422))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errorMessage").value("no extractable text"));
+    }
+
+    @Test
+    void uploadPdf_rejectedByExtractionService_returnsBusinessCode400() throws Exception {
+        MockMultipartFile pdfPart = new MockMultipartFile(
+                "file", "huge.pdf", "application/pdf", "irrelevant bytes".getBytes());
+        when(pdfExtractionService.extractText(any()))
+                .thenThrow(new IllegalArgumentException("PDF exceeds the byte limit"));
+
+        mockMvc.perform(multipart("/api/file/upload_pdf")
+                        .file(pdfPart)
+                        .param("repositoryId", "1")
+                        .param("ownerId", "10")
+                        .param("tenantId", "1")
+                        .param("defaultTitle", "draft-pdf-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void exportPdf_success_returnsPdfBytesWithDownloadHeaders() throws Exception {
+        File file = new File();
+        file.setId(42);
+        file.setTitle("design doc");
+        file.setContent("some content");
+        byte[] pdfBytes = {1, 2, 3, 4};
+        when(fileService.queryById(42, 7)).thenReturn(file);
+        when(pdfExportService.export("design doc", "some content")).thenReturn(pdfBytes);
+
+        mockMvc.perform(get("/api/file/42/export_pdf").param("userId", "7"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().stringValues("Content-Disposition",
+                        org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.containsString("attachment"))));
+    }
+
+    @Test
+    void exportPdf_fileNotFound_returnsHttp404() throws Exception {
+        when(fileService.queryById(anyInt(), anyInt()))
+                .thenThrow(new CantFindTargetFileException("The target file does not exist"));
+
+        mockMvc.perform(get("/api/file/{id}/export_pdf", 42).param("userId", "7"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void exportPdf_permissionDenied_returnsHttp403() throws Exception {
+        when(fileService.queryById(anyInt(), anyInt()))
+                .thenThrow(new UserPermissionDeniedException("You don't have right to read this file"));
+
+        mockMvc.perform(get("/api/file/{id}/export_pdf", 42).param("userId", "7"))
+                .andExpect(status().isForbidden());
     }
 
     private static String addBody(String content) {

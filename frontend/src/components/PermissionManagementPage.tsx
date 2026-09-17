@@ -7,6 +7,7 @@ import {
 import type { FormEvent } from "react";
 import { api } from "../api";
 import { errorMessage, formatDateTime } from "../format";
+import { useTranslation } from "../i18n";
 import {
   EXPIRATION_OPTIONS,
   PERMISSION_LEVEL_OPTIONS,
@@ -44,6 +45,7 @@ export function PermissionManagementPage({
   onBack,
   showToast,
 }: PermissionManagementPageProps) {
+  const { t } = useTranslation();
   const defaultInviteeId =
     users.find((user) => user.id !== userId)?.id ?? userId;
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
@@ -183,7 +185,7 @@ export function PermissionManagementPage({
     if (activeAction !== null) return;
     if (
       action === "revoke" &&
-      !window.confirm(`确定撤销 ${permission.name} 的权限吗？`)
+      !window.confirm(t("确定撤销 {name} 的权限吗？", { name: permission.name }))
     ) {
       return;
     }
@@ -225,7 +227,7 @@ export function PermissionManagementPage({
   };
 
   const targetLabel =
-    targetType === "FILE" ? "文档权限" : "知识库权限";
+    targetType === "FILE" ? t("文档权限") : t("知识库权限");
 
   return (
     <main className="permission-panel">
@@ -235,18 +237,20 @@ export function PermissionManagementPage({
             type="button"
             className="permission-back"
             onClick={onBack}
-            aria-label="返回"
+            aria-label={t("返回")}
           >
             ←
           </button>
           <div>
             <span className="permission-eyebrow">{targetLabel}</span>
             <h1>{targetTitle}</h1>
-            <p>管理成员访问权限，或为当前用户提交权限申请。</p>
+            <p>{t("管理成员访问权限，或为当前用户提交权限申请。")}</p>
           </div>
         </div>
         <span className="permission-target-badge">
-          {targetType === "FILE" ? "文档" : "知识库"} #{targetId}
+          {targetType === "FILE"
+            ? t("文档 #{id}", { id: targetId })
+            : t("知识库 #{id}", { id: targetId })}
         </span>
       </header>
 
@@ -257,8 +261,8 @@ export function PermissionManagementPage({
         >
           <div className="permission-section-heading">
             <div>
-              <h2 id="permission-members-title">成员权限</h2>
-              <p>待审批的申请会优先展示。</p>
+              <h2 id="permission-members-title">{t("成员权限")}</h2>
+              <p>{t("待审批的申请会优先展示。")}</p>
             </div>
             <button
               type="button"
@@ -266,7 +270,7 @@ export function PermissionManagementPage({
               disabled={loading}
               onClick={() => void loadPermissions()}
             >
-              {loading ? "刷新中…" : "刷新"}
+              {loading ? t("刷新中…") : t("刷新")}
             </button>
           </div>
 
@@ -274,19 +278,19 @@ export function PermissionManagementPage({
             <div className="permission-list-error" role="status">
               <span aria-hidden="true">🔒</span>
               <div>
-                <strong>暂时无法查看成员权限</strong>
-                <p>{listError}</p>
+                <strong>{t("暂时无法查看成员权限")}</strong>
+                <p>{t(listError)}</p>
               </div>
             </div>
           )}
           {loading && (
             <div className="permission-list-state">
-              正在加载成员权限…
+              {t("正在加载成员权限…")}
             </div>
           )}
           {!loading && !listError && sortedPermissions.length === 0 && (
             <div className="permission-list-state">
-              当前目标还没有权限记录
+              {t("当前目标还没有权限记录")}
             </div>
           )}
           {!loading &&
@@ -317,30 +321,30 @@ export function PermissionManagementPage({
                         <div className="permission-user-name">
                           {permission.name}
                           {permission.userId === userId && (
-                            <span className="permission-self">你</span>
+                            <span className="permission-self">{t("你")}</span>
                           )}
                         </div>
                         <span>
                           {permission.email ||
-                            `用户 ID ${permission.userId}`}
+                            t("用户 ID {id}", { id: permission.userId })}
                         </span>
                       </div>
                       <div className="permission-grant">
                         <strong>
-                          {permissionLevelLabel(
+                          {t(permissionLevelLabel(
                             permission.permissionType,
-                          )}
+                          ))}
                         </strong>
                         <span>
-                          到期{" "}
+                          {t("到期")}{" "}
                           {formatDateTime(permission.expirationTime) ||
-                            "未设置"}
+                            t("未设置")}
                         </span>
                       </div>
                       <span
                         className={`permission-status status-${permission.status.toLowerCase()}`}
                       >
-                        {permissionStatusLabel(permission.status)}
+                        {t(permissionStatusLabel(permission.status))}
                       </span>
                       <div className="permission-actions">
                         {permission.status !== "APPROVED" && (
@@ -357,8 +361,8 @@ export function PermissionManagementPage({
                           >
                             {activeAction ===
                             `approve:${permission.userId}`
-                              ? "批准中…"
-                              : "批准"}
+                              ? t("批准中…")
+                              : t("批准")}
                           </button>
                         )}
                         {permission.status === "PENDING" && (
@@ -375,8 +379,8 @@ export function PermissionManagementPage({
                           >
                             {activeAction ===
                             `reject:${permission.userId}`
-                              ? "拒绝中…"
-                              : "拒绝"}
+                              ? t("拒绝中…")
+                              : t("拒绝")}
                           </button>
                         )}
                         {permission.status === "APPROVED" && (
@@ -393,8 +397,8 @@ export function PermissionManagementPage({
                           >
                             {activeAction ===
                             `revoke:${permission.userId}`
-                              ? "撤销中…"
-                              : "撤销"}
+                              ? t("撤销中…")
+                              : t("撤销")}
                           </button>
                         )}
                       </div>
@@ -413,13 +417,13 @@ export function PermissionManagementPage({
             <div className="permission-form-title">
               <span aria-hidden="true">✉️</span>
               <div>
-                <h2>邀请成员</h2>
-                <p>需要当前用户具有可管理权限。</p>
+                <h2>{t("邀请成员")}</h2>
+                <p>{t("需要当前用户具有可管理权限。")}</p>
               </div>
             </div>
 
             <label className="permission-field">
-              <span>邀请用户</span>
+              <span>{t("邀请用户")}</span>
               <select
                 value={inviteeId}
                 onChange={(event) =>
@@ -429,12 +433,12 @@ export function PermissionManagementPage({
                 {users.filter((user) => user.id !== userId).map(
                   (user) => (
                     <option key={user.id} value={user.id}>
-                      {user.name}（ID {user.id}）
+                      {t("{name}（ID {id}）", { name: user.name, id: user.id })}
                     </option>
                   ),
                 )}
                 {!users.some((user) => user.id !== userId) && (
-                  <option value={userId}>暂无可邀请用户</option>
+                  <option value={userId}>{t("暂无可邀请用户")}</option>
                 )}
               </select>
             </label>
@@ -457,8 +461,8 @@ export function PermissionManagementPage({
                 }
               />
               <span>
-                立即生效
-                <small>关闭时将创建待审批记录</small>
+                {t("立即生效")}
+                <small>{t("关闭时将创建待审批记录")}</small>
               </span>
             </label>
             <button
@@ -470,7 +474,7 @@ export function PermissionManagementPage({
                 !users.some((user) => user.id === inviteeId)
               }
             >
-              {inviting ? "发送邀请中…" : "发送邀请"}
+              {inviting ? t("发送邀请中…") : t("发送邀请")}
             </button>
           </form>
 
@@ -481,8 +485,8 @@ export function PermissionManagementPage({
             <div className="permission-form-title">
               <span aria-hidden="true">🙋</span>
               <div>
-                <h2>申请权限</h2>
-                <p>为当前用户 user{userId} 提交申请。</p>
+                <h2>{t("申请权限")}</h2>
+                <p>{t("为当前用户 user{id} 提交申请。", { id: userId })}</p>
               </div>
             </div>
             <PermissionLevelField
@@ -500,7 +504,7 @@ export function PermissionManagementPage({
               className="btn btn-ghost permission-submit"
               disabled={requesting}
             >
-              {requesting ? "提交申请中…" : "提交申请"}
+              {requesting ? t("提交申请中…") : t("提交申请")}
             </button>
           </form>
         </aside>
@@ -520,9 +524,10 @@ function PermissionLevelField({
   onChange,
   id,
 }: SelectFieldProps<PermissionLevel>) {
+  const { t } = useTranslation();
   return (
     <label className="permission-field" htmlFor={id}>
-      <span>权限级别</span>
+      <span>{t("权限级别")}</span>
       <select
         id={id}
         value={value}
@@ -532,7 +537,7 @@ function PermissionLevelField({
       >
         {PERMISSION_LEVEL_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
-            {option.label} · {option.description}
+            {t(option.label)} · {t(option.description)}
           </option>
         ))}
       </select>
@@ -545,9 +550,10 @@ function ExpirationField({
   onChange,
   id,
 }: SelectFieldProps<number>) {
+  const { t } = useTranslation();
   return (
     <label className="permission-field" htmlFor={id}>
-      <span>有效期</span>
+      <span>{t("有效期")}</span>
       <select
         id={id}
         value={value}
@@ -555,7 +561,7 @@ function ExpirationField({
       >
         {EXPIRATION_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
-            {option.label}
+            {t(option.label)}
           </option>
         ))}
       </select>

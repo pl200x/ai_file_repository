@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.file_management.mapper.ChunkMapper">
+    <resultMap id="ChunkResultMap" type="com.example.file_management.entity.Chunk">
+        <id property="id" column="id"/>
+        <result property="fileId" column="file_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="chunkId" column="chunk_id"/>
+        <result property="chunkContent" column="chunk_content"/>
+        <result property="ownerId" column="owner_id"/>
+        <result property="repositoryId" column="repository_id"/>
+        <result property="chunkIndex" column="chunk_index"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <sql id="chunkColumns">
+        id, file_id, file_name, chunk_id, chunk_content,
+        owner_id, repository_id, chunk_index, create_time
+    </sql>
+
+    <!-- create_time 不出现在插入列里：交给 DB 的 DEFAULT CURRENT_TIMESTAMP，
+         实体里 createTime 为 null 时也不会写成 NULL 撞 NOT NULL -->
+    <insert id="addChunk" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chunks
+        (file_id, file_name, chunk_id, chunk_content, owner_id, repository_id, chunk_index)
+        VALUES
+        (#{fileId}, #{fileName}, #{chunkId}, #{chunkContent},
+        #{ownerId}, #{repositoryId}, #{chunkIndex})
+    </insert>
+
+    <!-- 一篇文档切出的全部片段一次落库，省往返；
+         空列表会让 foreach 生成 VALUES 后无内容的非法 SQL，守卫放在消费侧 -->
+    <insert id="addChunkList">
+        INSERT INTO chunks
+        (file_id, file_name, chunk_id, chunk_content, owner_id, repository_id, chunk_index)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.fileId}, #{item.fileName}, #{item.chunkId}, #{item.chunkContent},
+            #{item.ownerId}, #{item.repositoryId}, #{item.chunkIndex})
+        </foreach>
+    </insert>
+
+    <select id="queryById" resultMap="ChunkResultMap">
+        SELECT <include refid="chunkColumns"/>
+        FROM chunks WHERE id = #{id}
+    </select>
+
+    <!-- 命中 idx_chunks_repo_file，最左前缀是 repository_id，按文件查片段必须带库 id；
+         按 chunk_index 排序还原原文顺序 -->
+    <select id="queryByRepositoryIdAndFileId" resultMap="ChunkResultMap">
+        SELECT <include refid="chunkColumns"/>
+        FROM chunks
+        WHERE repository_id = #{repositoryId} AND file_id = #{fileId}
+        ORDER BY chunk_index
+    </select>
+
+    <!-- 向量检索的回表查询：Milvus 返回一批 doc_id（= chunk_id），这里批量取原文。
+         空列表会让 IN () 变成非法 SQL，守卫放在 service 层 -->
+    <select id="queryByChunkId" resultMap="ChunkResultMap">
+        SELECT <include refid="chunkColumns"/>
+        FROM chunks
+        WHERE chunk_id IN
+        <foreach collection="chunkIds" item="chunkId" open="(" separator="," close=")">
+            #{chunkId}
+        </foreach>
+    </select>
+
+    <!-- 关键字召回（两路召回的第二路）：走 ft_chunks_content 全文索引（ngram 分词器），
+         按相关度降序取前 limit 条。索引由 005_chunks_fulltext.sql 建立，
+         缺索引时 MySQL 报 ERROR 1191，service 层捕获后降级成纯向量召回。
+
+         用自然语言模式而不是布尔模式：用户问题原样当查询串传进来，
+         + - * " ~ 这些布尔算符在自然语言模式下只是普通字符，
+         不会被解释成语法，也就不需要在应用层做转义。
+
+         MATCH 在 WHERE 和 ORDER BY 里各写一遍是 MySQL 的常规写法，
+         优化器识别成同一个表达式，只做一次全文检索。 -->
+    <select id="queryTopKByKeyword" resultMap="ChunkResultMap">
+        SELECT <include refid="chunkColumns"/>
+        FROM chunks
+        WHERE MATCH(chunk_content) AGAINST (#{keyword} IN NATURAL LANGUAGE MODE)
+        ORDER BY MATCH(chunk_content) AGAINST (#{keyword} IN NATURAL LANGUAGE MODE) DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 重新切分前先清空整篇：消费端靠"先删后插"保证重试幂等 -->
+    <delete id="deleteAllChunk">
+        DELETE FROM chunks
+        WHERE repository_id = #{repositoryId} AND file_id = #{fileId}
+    </delete>
+</mapper>

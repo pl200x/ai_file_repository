@@ -1,4 +1,5 @@
 import { formatDateTime, userName } from "../format";
+import { useTranslation } from "../i18n";
 import type { FileDocument, UserSummary } from "../types";
 
 interface TrashBinPageProps {
@@ -20,6 +21,7 @@ export function TrashBinPage({
   onDelete,
   onRestore,
 }: TrashBinPageProps) {
+  const { t } = useTranslation();
   const actionInProgress =
     deletingFileId !== null || restoringFileId !== null;
 
@@ -27,11 +29,11 @@ export function TrashBinPage({
     <main className="trash-panel">
       <div className="trash-header">
         <div>
-          <h1>回收站</h1>
-          <p>这里展示已被软删除的文档。永久删除后将无法恢复。</p>
+          <h1>{t("回收站")}</h1>
+          <p>{t("这里展示已被软删除的文档。永久删除后将无法恢复。")}</p>
         </div>
         <span className="trash-count">
-          {loading ? "加载中…" : `${documents.length} 个文档`}
+          {loading ? t("加载中…") : t("{count} 个文档", { count: documents.length })}
         </span>
       </div>
 
@@ -39,10 +41,10 @@ export function TrashBinPage({
         {!loading && documents.length === 0 && (
           <div className="trash-empty">
             <span aria-hidden="true">🗑️</span>
-            <p>回收站是空的</p>
+            <p>{t("回收站是空的")}</p>
           </div>
         )}
-        {loading && <div className="trash-loading">正在加载回收站…</div>}
+        {loading && <div className="trash-loading">{t("正在加载回收站…")}</div>}
         {!loading && documents.length > 0 && (
           <ul className="trash-list">
             {documents.map((document) => (
@@ -55,7 +57,7 @@ export function TrashBinPage({
                     {document.title}
                   </span>
                   <span className="trash-file-meta">
-                    {userName(document.ownerId, users)} · 移入于{" "}
+                    {userName(document.ownerId, users, (id) => t("用户 ID {id}", { id }))} · {t("移入于")}{" "}
                     {formatDateTime(document.recentUpdateTime)}
                   </span>
                 </div>
@@ -67,8 +69,8 @@ export function TrashBinPage({
                     onClick={() => onRestore(document.id)}
                   >
                     {restoringFileId === document.id
-                      ? "恢复中…"
-                      : "恢复"}
+                      ? t("恢复中…")
+                      : t("恢复")}
                   </button>
                   <button
                     type="button"
@@ -77,8 +79,8 @@ export function TrashBinPage({
                     onClick={() => onDelete(document.id)}
                   >
                     {deletingFileId === document.id
-                      ? "永久删除中…"
-                      : "永久删除"}
+                      ? t("永久删除中…")
+                      : t("永久删除")}
                   </button>
                 </div>
               </li>

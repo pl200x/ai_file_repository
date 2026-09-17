@@ -1,6 +1,6 @@
 package com.example.file_management.integration;
 
-import com.example.file_management.controller.BaseVO;
+import com.example.file_management.controller.vo.BaseVO;
 import com.example.file_management.integration.vo.SinglePermissionVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

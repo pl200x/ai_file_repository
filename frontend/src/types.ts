@@ -47,12 +47,15 @@ export interface KnowledgeRepository {
   personal: boolean;
 }
 
+export type ContentFormat = "PLAIN" | "MARKDOWN";
+
 export interface FileDocument {
   id: number;
   repositoryId: number;
   ownerId: number;
   title: string;
   content: string;
+  contentFormat?: ContentFormat | null;
   writerList?: string | null;
   readerList?: string | null;
   manageableList?: string | null;
@@ -130,6 +133,54 @@ export interface AddFileVersionRequest {
   defaultTitle: string;
 }
 
+export type NotificationTopic =
+  | "APPLY_PERMISSION"
+  | "LIKE"
+  | "COMMENT";
+
+export interface NotificationItem {
+  id: number;
+  topic: NotificationTopic | string;
+  applicantId: number;
+  applicantName?: string | null;
+  applicantProfile?: string | null;
+  receiverId: number;
+  targetType: PermissionTargetType;
+  targetId: number;
+  targetTitle?: string | null;
+  operationContent?: string | null;
+  operationTime?: string | number | null;
+  read: boolean;
+}
+
+export interface NotificationPage {
+  notifications: NotificationItem[];
+  total: number;
+  unreadCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface NotificationReadRequest {
+  id: number;
+  receiverId: number;
+  read: boolean;
+}
+
+//检索命中的片段。后端ChunkVO的isVisible字段经Lombok/Jackson后线上名是visible。
+//无权限的命中仍会返回，但fileName和chunkContent为null
+export interface ChunkHit {
+  id: number;
+  fileId: number;
+  fileName: string | null;
+  chunkId: string;
+  chunkContent: string | null;
+  ownerId: number;
+  repositoryId: number;
+  chunkIndex: number;
+  visible: boolean;
+}
+
 export interface UserPermission {
   permissionId: number;
   userId: number;
@@ -172,6 +223,9 @@ export interface PermissionOperationRequest {
 export type AppRoute =
   | { mode: "home"; repoId: null; fileId: null }
   | { mode: "trash"; repoId: null; fileId: null }
+  | { mode: "notifications"; repoId: null; fileId: null }
+  | { mode: "search"; repoId: null; fileId: null }
+  | { mode: "assistant"; repoId: null; fileId: null }
   | { mode: "repository"; repoId: number; fileId: null }
   | {
       mode: "permissions";

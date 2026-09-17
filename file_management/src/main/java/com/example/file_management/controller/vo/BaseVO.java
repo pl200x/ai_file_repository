@@ -1,4 +1,4 @@
-package com.example.file_management.controller;
+package com.example.file_management.controller.vo;
 
 public class BaseVO {
     private int code;

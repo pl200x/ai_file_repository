@@ -6,7 +6,10 @@ import com.example.file_management.controller.dto.RequestPermissionDTO;
 import com.example.file_management.controller.vo.UserPermissionVO;
 import com.example.file_management.entity.File;
 import com.example.file_management.entity.KnowledgeRepository;
+import com.example.file_management.entity.NotificationMessage;
 import com.example.file_management.entity.User;
+import com.example.file_management.enums.NotificationTargetType;
+import com.example.file_management.enums.NotificationTopic;
 import com.example.file_management.enums.PermissionTargetType;
 import com.example.file_management.enums.PermissionType;
 import com.example.file_management.exception.CantFindTargetFileException;
@@ -19,15 +22,16 @@ import com.example.file_management.mapper.FileMapper;
 import com.example.file_management.service.PermissionManagementService;
 import com.example.file_management.service.KnowledgeRepositoryService;
 import com.example.file_management.service.UserService;
+import com.example.file_management.service.producer.NotificationSendingProducer;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Service
+@RequiredArgsConstructor
 public class PermissionManagementServiceImpl implements PermissionManagementService {
+
     private static final long ONE_DAY_MS = 86_400_000L;
     private static final long THREE_DAYS_MS = 259_200_000L;
     private static final long ONE_MONTH_MS = 2_592_000_000L;
@@ -37,22 +41,13 @@ public class PermissionManagementServiceImpl implements PermissionManagementServ
             THREE_DAYS_MS,
             ONE_MONTH_MS,
             ONE_YEAR_MS);
-
     private final PermissionIntegration permissionIntegration;
     private final UserService userService;
     private final KnowledgeRepositoryService knowledgeRepositoryService;
     private final FileMapper fileMapper;
+    private final NotificationSendingProducer notificationSendingProducer;
 
-    public PermissionManagementServiceImpl(
-            PermissionIntegration permissionIntegration,
-            UserService userService,
-            KnowledgeRepositoryService knowledgeRepositoryService,
-            FileMapper fileMapper) {
-        this.permissionIntegration = permissionIntegration;
-        this.userService = userService;
-        this.knowledgeRepositoryService = knowledgeRepositoryService;
-        this.fileMapper = fileMapper;
-    }
+
 
     @Override
     public List<UserPermissionVO> queryPermissionsByTarget(
@@ -154,6 +149,44 @@ public class PermissionManagementServiceImpl implements PermissionManagementServ
                 targetType,
                 permissionType,
                 requestPermissionDTO.expirationDate()));
+
+        //通知目标上的全部管理者：targetType用上面规范化过的值，
+        //不用DTO原值，否则大小写不一致时权限服务查不到人
+        List<PermissionVO> permissionVOList = permissionIntegration
+                .getPermissionsByTarget(targetType,
+                        requestPermissionDTO.targetId());
+        List<Integer> managerList = new ArrayList<>();
+        for (PermissionVO each : permissionVOList) {
+            //manageable是包装类型，权限服务没返回该字段时为null，直接拆箱会NPE
+            if (!Boolean.TRUE.equals(each.getManageable())) {
+                continue;
+            }
+            //申请人自己就是管理者时不给自己发
+            if (each.getUserId() == requestPermissionDTO.requestUserId()) {
+                continue;
+            }
+            managerList.add(each.getUserId());
+        }
+
+        //事件时间在生产端定：operation_time是NOT NULL，
+        //且消费时间会随重试和DLT滞留漂移，同一批共用一个时间戳
+        Date operationTime = new Date();
+        List<NotificationMessage> notificationMessageList = new ArrayList<>();
+        for (Integer each : managerList) {
+            NotificationMessage notificationMessage = new NotificationMessage();
+            notificationMessage.setTopic(NotificationTopic.APPLY_PERMISSION.getCode());
+            notificationMessage.setApplicant(requestPermissionDTO.requestUserId());
+            notificationMessage.setReceiverId(each);
+            notificationMessage.setTargetType(targetType);
+            notificationMessage.setTargetId(requestPermissionDTO.targetId());
+            //展示文案里唯一不能从其它字段推出来的信息就是申请的权限级别；
+            //申请人姓名和目标标题留到读侧VO批量补齐，避免这里逐条查库
+            notificationMessage.setOperationContent(permissionType);
+            notificationMessage.setOperationTime(operationTime);
+            notificationMessageList.add(notificationMessage);
+        }
+
+        notificationSendingProducer.sendNotification(notificationMessageList);
     }
 
     @Override

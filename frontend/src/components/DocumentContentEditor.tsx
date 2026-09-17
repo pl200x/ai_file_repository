@@ -16,6 +16,7 @@ import {
   convertImageFileToDataUrl,
   MAX_IMAGE_SIZE_BYTES,
 } from "../imageUpload";
+import { useTranslation } from "../i18n";
 
 interface DocumentContentEditorProps {
   value: string;
@@ -50,6 +51,7 @@ export function DocumentContentEditor({
   placeholder,
   disabled = false,
 }: DocumentContentEditorProps) {
+  const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textAreaRefs = useRef(new Map<number, HTMLTextAreaElement>());
@@ -207,7 +209,7 @@ export function DocumentContentEditor({
       className={`document-content-editor ${
         disabled ? "disabled" : ""
       }`}
-      aria-label="文档正文编辑器"
+      aria-label={t("文档正文编辑器")}
     >
       <div className="content-editor-toolbar">
         <button
@@ -216,10 +218,10 @@ export function DocumentContentEditor({
           onClick={openImagePicker}
           disabled={disabled || uploading}
         >
-          {uploading ? "图片处理中…" : "插入图片"}
+          {uploading ? t("图片处理中…") : t("插入图片")}
         </button>
         <span className="image-upload-help">
-          PNG、JPG、GIF、WebP，单张不超过{" "}
+          {t("PNG、JPG、GIF、WebP，单张不超过")}{" "}
           {MAX_IMAGE_SIZE_BYTES / 1024 / 1024} MB
         </span>
         <input
@@ -229,7 +231,7 @@ export function DocumentContentEditor({
           accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp"
           onChange={(event) => void handleImageSelection(event)}
           disabled={disabled || uploading}
-          aria-label="选择要插入的图片"
+          aria-label={t("选择要插入的图片")}
         />
       </div>
       <div className="content-block-list">
@@ -240,16 +242,16 @@ export function DocumentContentEditor({
                 className="content-image-block"
                 key={`image-${block.start}`}
               >
-                <img src={block.dataUrl} alt="文档图片" />
+                <img src={block.dataUrl} alt={t("文档图片")} />
                 <button
                   type="button"
                   className="image-remove-button"
                   onClick={() => removeImage(blockIndex, block.start)}
                   disabled={disabled}
-                  aria-label="删除这张图片"
-                  title="删除图片"
+                  aria-label={t("删除这张图片")}
+                  title={t("删除图片")}
                 >
-                  删除
+                  {t("删除")}
                 </button>
               </figure>
             );
@@ -282,10 +284,10 @@ export function DocumentContentEditor({
                 block.content
                   ? undefined
                   : followsImage
-                    ? "在图片下方继续输入…"
+                    ? t("在图片下方继续输入…")
                     : placeholder
               }
-              aria-label={`文档正文文本区域 ${blockIndex + 1}`}
+              aria-label={t("文档正文文本区域 {index}", { index: blockIndex + 1 })}
               disabled={disabled}
               rows={1}
             />

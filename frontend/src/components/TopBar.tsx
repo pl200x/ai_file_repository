@@ -1,4 +1,5 @@
 import type { UserSummary } from "../types";
+import { useTranslation } from "../i18n";
 
 interface TopBarProps {
   userId: number;
@@ -13,17 +14,30 @@ export function TopBar({
   loading,
   onUserChange,
 }: TopBarProps) {
+  const { language, setLanguage, t } = useTranslation();
   return (
     <header className="topbar">
       <div className="brand">
         <span className="brand-logo" aria-hidden="true">
-          语
+          {t("语")}
         </span>
-        <span className="brand-name">AI 知识库</span>
+        <span className="brand-name">{t("AI 知识库")}</span>
       </div>
       <div className="topbar-right">
+        <label className="identity-label" htmlFor="language-select">
+          {t("语言")}
+        </label>
+        <select
+          id="language-select"
+          className="user-select"
+          value={language}
+          onChange={(event) => setLanguage(event.target.value as "zh-CN" | "en")}
+        >
+          <option value="zh-CN">{t("简体中文")}</option>
+          <option value="en">English</option>
+        </select>
         <label className="identity-label" htmlFor="user-select">
-          当前用户
+          {t("当前用户")}
         </label>
         <select
           id="user-select"
@@ -34,7 +48,7 @@ export function TopBar({
         >
           {users.length === 0 ? (
             <option value={userId}>
-              {loading ? "正在加载用户…" : `用户 ID ${userId}`}
+              {loading ? t("正在加载用户…") : t("用户 ID {id}", { id: userId })}
             </option>
           ) : (
             users.map((user) => (

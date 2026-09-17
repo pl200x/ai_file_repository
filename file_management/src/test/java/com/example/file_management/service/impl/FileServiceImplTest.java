@@ -5,6 +5,8 @@ import com.example.file_management.controller.dto.DeleteFileDTO;
 import com.example.file_management.controller.dto.FileVersionDTO;
 import com.example.file_management.controller.dto.UpdateFileDTO;
 import com.example.file_management.controller.vo.FileWriteResultVO;
+import com.example.file_management.entity.Chunk;
+import com.example.file_management.entity.ChunkSplittingMessage;
 import com.example.file_management.entity.File;
 import com.example.file_management.entity.FileVersion;
 import com.example.file_management.entity.KnowledgeRepository;
@@ -17,7 +19,9 @@ import com.example.file_management.mapper.FileMapper;
 import com.example.file_management.mapper.FileVersionMapper;
 import com.example.file_management.mapper.KnowledgeRepositoryMapper;
 import com.example.file_management.mapper.UserMapper;
+import com.example.file_management.service.ChunkService;
 import com.example.file_management.service.FileVersionService;
+import com.example.file_management.service.producer.ChunkSplittingProducer;
 import com.example.file_management.service.producer.PermissionBatchGivingProducer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,7 +42,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,6 +75,10 @@ class FileServiceImplTest {
     private PermissionBatchGivingProducer permissionBatchGivingProducer;
     @Mock
     private FileVersionService fileVersionService;
+    @Mock
+    private ChunkSplittingProducer chunkSplittingProducer;
+    @Mock
+    private ChunkService chunkService;
 
     @InjectMocks
     private FileServiceImpl fileService;
@@ -253,7 +260,7 @@ class FileServiceImplTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<PermissionDTO>> captor =
                 ArgumentCaptor.forClass((Class<List<PermissionDTO>>) (Class<?>) List.class);
-        verify(permissionBatchGivingProducer).sendBatchGiving(eq(42), captor.capture());
+        verify(permissionBatchGivingProducer).sendBatchGiving(captor.capture());
 
         Map<Integer, String> levelByUserId = new HashMap<>();
         for (PermissionDTO member : captor.getValue()) {
@@ -432,6 +439,121 @@ class FileServiceImplTest {
         assertEquals(deletedFiles, fileService.queryAllTrashBin(7));
     }
 
+    @Test
+    void updateFile_contentChanged_publishesChunkSplitting() {
+        stubSuccessfulUpdate(true);
+
+        fileService.updateFile(
+                updateDto("design doc", TEXT_ONLY_CONTENT, false),
+                versionDto(42, "design doc", TEXT_ONLY_CONTENT));
+
+        ChunkSplittingMessage message = captureSplittingMessage();
+        assertEquals(42, message.getFileId());
+        assertEquals("design doc", message.getFileName());
+        assertEquals(TEXT_ONLY_CONTENT, message.getContent());
+        //归属跟着文件走：编辑人是10这里恰好也是owner，但取的必须是file.ownerId
+        assertEquals(10, message.getOwnerId());
+        assertEquals(1, message.getRepositoryId());
+    }
+
+    /**
+     * updateFile has no idempotent short circuit, so a submit that changed
+     * nothing would otherwise pay for a full re-embedding on every save.
+     */
+    @Test
+    void updateFile_contentUnchangedAndIndexed_skipsChunkSplitting() {
+        File existing = stubSuccessfulUpdate(true);
+        when(chunkService.queryByRepositoryIdAndFileId(1, 42))
+                .thenReturn(List.of(new Chunk()));
+
+        fileService.updateFile(
+                updateDto("design doc", existing.getContent(), false),
+                versionDto(42, "design doc", existing.getContent()));
+
+        verify(chunkSplittingProducer, never()).sendChunkSplitting(any());
+    }
+
+    /**
+     * A publish that silently failed, or a message that ended in the DLT,
+     * leaves the file with no chunks at all. Re-submitting repairs it.
+     */
+    @Test
+    void updateFile_contentUnchangedButNotIndexed_republishes() {
+        File existing = stubSuccessfulUpdate(true);
+
+        fileService.updateFile(
+                updateDto("design doc", existing.getContent(), false),
+                versionDto(42, "design doc", existing.getContent()));
+
+        assertEquals(42, captureSplittingMessage().getFileId());
+    }
+
+    @Test
+    void retryCommittedAdd_contentChanged_publishesChunkSplitting() {
+        stubRetryPrerequisites(TEXT_ONLY_CONTENT);
+        //只有改写那一支会落到主表更新，共用的前置桩里不能放（严格桩会判未使用）
+        when(fileMapper.updateFile(any())).thenReturn(1);
+        stubVersionResult();
+
+        fileService.addFile(
+                addDto("design doc", "a completely rewritten body", false),
+                versionDto(null, "design doc", "a completely rewritten body"));
+
+        ChunkSplittingMessage message = captureSplittingMessage();
+        assertEquals(42, message.getFileId());
+        assertEquals("a completely rewritten body", message.getContent());
+    }
+
+    @Test
+    void retryCommittedAdd_alreadyCommittedAndIndexed_skipsChunkSplitting() {
+        stubRetryPrerequisites(TEXT_ONLY_CONTENT);
+        when(chunkService.queryByRepositoryIdAndFileId(1, 42))
+                .thenReturn(List.of(new Chunk()));
+
+        fileService.addFile(
+                addDto("design doc", TEXT_ONLY_CONTENT, false),
+                versionDto(null, "design doc", TEXT_ONLY_CONTENT));
+
+        verify(chunkSplittingProducer, never()).sendChunkSplitting(any());
+        verify(fileMapper, never()).updateFile(any());
+    }
+
+    @Test
+    void retryCommittedAdd_alreadyCommittedButNotIndexed_republishes() {
+        stubRetryPrerequisites(TEXT_ONLY_CONTENT);
+
+        fileService.addFile(
+                addDto("design doc", TEXT_ONLY_CONTENT, false),
+                versionDto(null, "design doc", TEXT_ONLY_CONTENT));
+
+        assertEquals(TEXT_ONLY_CONTENT, captureSplittingMessage().getContent());
+        //补发不等于重写：这条分支仍然什么都不写
+        verify(fileMapper, never()).updateFile(any());
+    }
+
+    private void stubRetryPrerequisites(String committedContent) {
+        when(permissionIntegration.checkPermissionByTypeTargetUserId(
+                anyString(), anyInt(), anyInt(), anyString())).thenReturn(true);
+        when(knowledgeRepositoryMapper.queryByIdForUpdate(1))
+                .thenReturn(emptyRepository());
+        when(fileVersionMapper.queryLinkedFileIdsByDefaultTitle(
+                1, 1, DEFAULT_TITLE)).thenReturn(List.of(42));
+
+        File existing = existingFile(42);
+        existing.setContent(committedContent);
+        when(fileMapper.queryByIdForUpdate(42)).thenReturn(existing);
+        when(fileVersionMapper.queryLastByTenantIdRepositoryIdAndTitle(
+                1, 1, DEFAULT_TITLE)).thenReturn(
+                latestVersion(42, 7, "design doc", committedContent, DEFAULT_TITLE));
+    }
+
+    private ChunkSplittingMessage captureSplittingMessage() {
+        ArgumentCaptor<ChunkSplittingMessage> captor =
+                ArgumentCaptor.forClass(ChunkSplittingMessage.class);
+        verify(chunkSplittingProducer).sendChunkSplitting(captor.capture());
+        return captor.getValue();
+    }
+
     private FileWriteResultVO executeSuccessfulAdd(
             String title,
             String content,
@@ -503,6 +625,7 @@ class FileServiceImplTest {
                 10,
                 title,
                 content,
+                null,
                 "10,11",
                 "10",
                 "",

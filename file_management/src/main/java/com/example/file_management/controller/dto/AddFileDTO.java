@@ -7,6 +7,9 @@ public record AddFileDTO(
         int ownerId,
         String title,
         String content,
+        //null/blank会在service层按File.CONTENT_FORMAT_PLAIN处理；
+        //手动创建/更新文档的JSON请求体不需要传这个字段
+        String contentFormat,
         String writableList,
         String readableList,
         String manageableList,

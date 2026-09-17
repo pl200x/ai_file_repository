@@ -5,6 +5,7 @@ import com.example.file_management.controller.dto.PermissionOperationDTO;
 import com.example.file_management.controller.dto.RequestPermissionDTO;
 import com.example.file_management.controller.vo.UserPermissionVO;
 import com.example.file_management.entity.File;
+import com.example.file_management.entity.NotificationMessage;
 import com.example.file_management.entity.User;
 import com.example.file_management.exception.UserPermissionDeniedException;
 import com.example.file_management.integration.PermissionDTO;
@@ -13,6 +14,7 @@ import com.example.file_management.integration.vo.PermissionVO;
 import com.example.file_management.mapper.FileMapper;
 import com.example.file_management.service.KnowledgeRepositoryService;
 import com.example.file_management.service.UserService;
+import com.example.file_management.service.producer.NotificationSendingProducer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -26,6 +28,7 @@ import java.util.Date;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -45,6 +48,8 @@ class PermissionManagementServiceImplTest {
     private KnowledgeRepositoryService knowledgeRepositoryService;
     @Mock
     private FileMapper fileMapper;
+    @Mock
+    private NotificationSendingProducer notificationSendingProducer;
 
     @InjectMocks
     private PermissionManagementServiceImpl permissionManagementService;
@@ -116,6 +121,66 @@ class PermissionManagementServiceImplTest {
         verify(permissionIntegration)
                 .givePermissionByUserID(captor.capture());
         assertEquals(permissionLevel, captor.getValue().getPermission());
+    }
+
+    @Test
+    void selfRequest_notifiesEveryManagerButNotTheApplicant() {
+        stubFileAndActor(9);
+        when(permissionIntegration.checkPermissionByTypeTargetUserId(
+                "FILE", 42, 9, "READABLE")).thenReturn(false);
+        when(permissionIntegration.getPermissionsByTarget("FILE", 42))
+                .thenReturn(List.of(
+                        permission(1, 3, true, true, true, "APPROVED"),
+                        permission(2, 4, true, true, true, "APPROVED"),
+                        //申请人自己恰好也是管理者时不该收到自己的申请
+                        permission(3, 9, true, true, true, "APPROVED"),
+                        //非管理者不该收到
+                        permission(4, 7, true, false, false, "APPROVED")));
+
+        permissionManagementService.requestPermission(
+                new RequestPermissionDTO(
+                        9, 9, "FILE", 42, "READABLE", 259_200_000L));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<NotificationMessage>> captor =
+                ArgumentCaptor.forClass(
+                        (Class<List<NotificationMessage>>) (Class<?>) List.class);
+        verify(notificationSendingProducer).sendNotification(captor.capture());
+
+        List<NotificationMessage> sent = captor.getValue();
+        assertEquals(2, sent.size());
+        assertEquals(
+                List.of(3, 4),
+                sent.stream().map(NotificationMessage::getReceiverId).toList());
+        for (NotificationMessage message : sent) {
+            assertEquals("APPLY_PERMISSION", message.getTopic());
+            assertEquals(9, message.getApplicant());
+            assertEquals("FILE", message.getTargetType());
+            assertEquals(42, message.getTargetId());
+            assertEquals("READABLE", message.getOperationContent());
+            //operation_time是NOT NULL，生产端不填会让消费侧插入失败进DLT
+            assertNotNull(message.getOperationTime());
+        }
+    }
+
+    @Test
+    void selfRequest_withNoManagerOnTarget_sendsNothing() {
+        stubFileAndActor(9);
+        when(permissionIntegration.checkPermissionByTypeTargetUserId(
+                "FILE", 42, 9, "READABLE")).thenReturn(false);
+        when(permissionIntegration.getPermissionsByTarget("FILE", 42))
+                .thenReturn(List.of(permission(1, 7, true, false, false, "APPROVED")));
+
+        permissionManagementService.requestPermission(
+                new RequestPermissionDTO(
+                        9, 9, "FILE", 42, "READABLE", 259_200_000L));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<NotificationMessage>> captor =
+                ArgumentCaptor.forClass(
+                        (Class<List<NotificationMessage>>) (Class<?>) List.class);
+        verify(notificationSendingProducer).sendNotification(captor.capture());
+        assertEquals(List.of(), captor.getValue());
     }
 
     @Test

@@ -1,5 +1,6 @@
 import type {
   AddFileRequest,
+  ChunkHit,
   AddFileVersionRequest,
   BaseResponse,
   DataResponse,
@@ -8,6 +9,8 @@ import type {
   FileWriteResult,
   InvitationRequest,
   KnowledgeRepository,
+  NotificationPage,
+  NotificationReadRequest,
   PermissionOperationRequest,
   PermissionRequest,
   PermissionTargetType,
@@ -15,6 +18,7 @@ import type {
   UserSummary,
   UserPermission,
 } from "./types";
+import { buildAgentChatBody } from "./agentChat";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -84,6 +88,22 @@ function put<T extends BaseResponse, TBody>(
 }
 
 export const api = {
+  chatWithAgent(
+    sessionId: string,
+    userInput: string,
+    userId: number,
+    signal?: AbortSignal,
+  ): Promise<DataResponse<string>> {
+    return request("/api/agent/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: buildAgentChatBody(sessionId, userInput, userId),
+      signal,
+    });
+  },
+
   listUsers(
     tenantId: number,
     signal?: AbortSignal,
@@ -178,6 +198,51 @@ export const api = {
     return post("/api/file/addfile", body);
   },
 
+  uploadPdf(
+    file: File,
+    repositoryId: number,
+    ownerId: number,
+    tenantId: number,
+    defaultTitle: string,
+  ): Promise<DataResponse<FileWriteResult>> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("repositoryId", String(repositoryId));
+    formData.append("ownerId", String(ownerId));
+    formData.append("tenantId", String(tenantId));
+    formData.append("defaultTitle", defaultTitle);
+    // 不手动设置 Content-Type：浏览器会自动带上 multipart 边界，手动设置反而会丢掉它
+    return request("/api/file/upload_pdf", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  uploadMarkdown(
+    file: File,
+    repositoryId: number,
+    ownerId: number,
+    tenantId: number,
+    defaultTitle: string,
+  ): Promise<DataResponse<FileWriteResult>> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("repositoryId", String(repositoryId));
+    formData.append("ownerId", String(ownerId));
+    formData.append("tenantId", String(tenantId));
+    formData.append("defaultTitle", defaultTitle);
+    return request("/api/file/upload_markdown", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  //导出下载走浏览器原生 <a download>/window.open，这里只负责拼 URL，不发请求
+  exportPdfUrl(fileId: number, userId: number): string {
+    const query = new URLSearchParams({ userId: String(userId) });
+    return `${API_BASE_URL}/api/file/${fileId}/export_pdf?${query}`;
+  },
+
   updateFile(
     body: UpdateFileRequest,
   ): Promise<DataResponse<FileWriteResult>> {
@@ -253,6 +318,57 @@ export const api = {
     body: PermissionRequest,
   ): Promise<DataResponse<null>> {
     return post("/api/permission_management/request_permission", body);
+  },
+
+  //语义检索：k由调用方给，后端限制1-50，越界返回400
+  searchChunks(
+    userInput: string,
+    userId: number,
+    k: number,
+    signal?: AbortSignal,
+  ): Promise<DataResponse<ChunkHit[]>> {
+    const query = new URLSearchParams({
+      userInput,
+      userId: String(userId),
+      k: String(k),
+    }).toString();
+    return request(
+      `/api/chunk/query?${query}`,
+      signal ? { signal } : undefined,
+    );
+  },
+
+  notificationUnreadCount(
+    receiverId: number,
+    signal?: AbortSignal,
+  ): Promise<DataResponse<number>> {
+    return request(
+      `/api/notification/unread_count?receiverId=${receiverId}`,
+      signal ? { signal } : undefined,
+    );
+  },
+
+  listNotifications(
+    receiverId: number,
+    page: number,
+    pageSize: number,
+    signal?: AbortSignal,
+  ): Promise<DataResponse<NotificationPage>> {
+    const query = new URLSearchParams({
+      receiverId: String(receiverId),
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    return request(
+      `/api/notification/list?${query}`,
+      signal ? { signal } : undefined,
+    );
+  },
+
+  markNotificationRead(
+    body: NotificationReadRequest,
+  ): Promise<DataResponse<null>> {
+    return put("/api/notification/read", body);
   },
 
   approvePermission(

@@ -13,9 +13,14 @@ export function formatClock(date: Date) {
   return `${part(date.getHours())}:${part(date.getMinutes())}:${part(date.getSeconds())}`;
 }
 
-export function userName(userId: number, users: UserSummary[]) {
+export function userName(
+  userId: number,
+  users: UserSummary[],
+  fallback?: (userId: number) => string,
+) {
   return (
     users.find((user) => user.id === userId)?.name ??
+    fallback?.(userId) ??
     `用户 ID ${userId}`
   );
 }
